@@ -115,7 +115,11 @@ export default function PreviewPane({
     if (/^(https?:|data:|blob:)/.test(imageSrc)) {
       return imageSrc
     }
-    if (/^[a-zA-Z]:\\/.test(imageSrc) || imageSrc.startsWith('\\\\')) {
+    if (
+      imageSrc.startsWith('\\\\?\\') ||
+      /^[a-zA-Z]:[\\/]/.test(imageSrc) ||
+      imageSrc.startsWith('\\\\')
+    ) {
       return convertFileSrc(imageSrc)
     }
     return imageSrc

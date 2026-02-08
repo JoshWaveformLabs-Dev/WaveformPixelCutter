@@ -64,6 +64,13 @@ export default function AppShell() {
     ? convertFileSrc(selectedImagePath)
     : sampleImage
   const previewLabel = selectedImage?.name ?? 'Sample input'
+  const thumbSrc = !selectedImagePath
+    ? sampleImage
+    : selectedImagePath.startsWith('\\\\?\\') ||
+        /^[a-zA-Z]:[\\/]/.test(selectedImagePath) ||
+        selectedImagePath.startsWith('\\\\')
+      ? convertFileSrc(selectedImagePath)
+      : selectedImagePath
   const sampleSubtext =
     !selectedImagePath || imageList.length === 0 || !inputDir
       ? 'Built-in sample'
@@ -271,9 +278,12 @@ export default function AppShell() {
             <div className="sample-selected">
               <img
                 className="sample-thumb"
-                src={previewSrc}
+                src={thumbSrc}
                 alt={previewLabel}
                 draggable={false}
+                onError={() => {
+                  console.warn('Sample thumb failed to load:', thumbSrc)
+                }}
               />
               <div className="sample-selected-meta">
                 <span className="sample-selected-name">{previewLabel}</span>
