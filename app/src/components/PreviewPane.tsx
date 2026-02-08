@@ -74,10 +74,17 @@ export default function PreviewPane({
     if (!naturalSize.width || !naturalSize.height) {
       return { x: 0, y: 0, w: 0, h: 0, scale: 1 }
     }
-    const scale = Math.min(
+    const fitScale = Math.min(
       containerSize.width / naturalSize.width,
       containerSize.height / naturalSize.height,
     )
+    const coverScale = Math.max(
+      containerSize.width / naturalSize.width,
+      containerSize.height / naturalSize.height,
+    )
+    const zoomedScale = fitScale * 1.06
+    const maxScale = Math.min(coverScale * 0.98, fitScale * 1.12)
+    const scale = Math.min(zoomedScale, maxScale)
     const w = naturalSize.width * scale
     const h = naturalSize.height * scale
     return {
