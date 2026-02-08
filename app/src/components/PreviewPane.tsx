@@ -135,31 +135,36 @@ export default function PreviewPane({
 
   const resolvedSrc = useMemo(() => resolveImageSrc(imageSrc), [imageSrc])
   const [displayedSrc, setDisplayedSrc] = useState<string>(() => resolvedSrc)
-  const [isLoading, setIsLoading] = useState<boolean>(false)
+  const [isImageLoading, setIsImageLoading] = useState<boolean>(false)
+  const [isImageLoaded, setIsImageLoaded] = useState<boolean>(false)
+  const [isImageError, setIsImageError] = useState<boolean>(false)
   const warnedRef = useRef<string | null>(null)
   const lastRequestedRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!resolvedSrc || resolvedSrc === displayedSrc) {
-      setIsLoading(false)
+      setIsImageLoading(false)
       return
     }
     if (lastRequestedRef.current === resolvedSrc) {
       return
     }
     lastRequestedRef.current = resolvedSrc
-    setIsLoading(true)
+    setIsImageLoading(true)
+    setIsImageLoaded(false)
+    setIsImageError(false)
     const preload = new Image()
     preload.onload = () => {
       setDisplayedSrc(resolvedSrc)
-      setIsLoading(false)
     }
     preload.onerror = () => {
       if (warnedRef.current !== resolvedSrc) {
         console.warn('Preview image failed to preload:', resolvedSrc)
         warnedRef.current = resolvedSrc
       }
-      setIsLoading(false)
+      setIsImageLoading(false)
+      setIsImageLoaded(true)
+      setIsImageError(false)
     }
     preload.src = resolvedSrc
     return () => {
@@ -276,25 +281,27 @@ export default function PreviewPane({
           alt={imageLabel}
           draggable={false}
           onError={() => {
-            console.warn(
-              'Preview image failed to load, requesting data url:',
-              displayedSrc,
-            )
+            console.warn('Preview image failed to load:', resolvedSrc)
+            setIsImageLoading(false)
+            setIsImageLoaded(false)
+            setIsImageError(true)
             if (!isLocalPath(imageSrc)) {
-              setIsLoading(false)
               return
             }
             invoke<string>('read_image_data_url', { path: imageSrc })
               .then((dataUrl) => {
                 setDisplayedSrc(dataUrl)
-                setIsLoading(false)
+                setIsImageLoading(true)
+                setIsImageLoaded(false)
               })
               .catch((error) => {
                 console.warn('Preview image data url failed:', error)
-                setIsLoading(false)
               })
           }}
           onLoad={(event) => {
+            setIsImageLoaded(true)
+            setIsImageLoading(false)
+            setIsImageError(false)
             const target = event.currentTarget
             setNaturalSize({
               width: target.naturalWidth,
@@ -308,8 +315,11 @@ export default function PreviewPane({
             height: `${displayRect.h}px`,
           }}
         />
-        {isLoading ? (
+        {isImageLoading && !isImageLoaded ? (
           <div className="preview-loading">Loading image…</div>
+        ) : null}
+        {isImageError ? (
+          <div className="preview-loading">Failed to load image</div>
         ) : null}
         {outlineRect ? (
           <div
