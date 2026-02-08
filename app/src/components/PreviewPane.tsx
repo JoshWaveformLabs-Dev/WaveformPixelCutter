@@ -126,6 +126,15 @@ export default function PreviewPane({
     }
     return imageSrc
   }, [imageSrc])
+  const [stableSrc, setStableSrc] = useState<string>(() => resolvedSrc)
+  const [isLoaded, setIsLoaded] = useState<boolean>(false)
+  const currentWantedSrc = fallbackDataUrl ?? resolvedSrc
+
+  useEffect(() => {
+    if (currentWantedSrc !== stableSrc) {
+      setIsLoaded(false)
+    }
+  }, [currentWantedSrc, stableSrc])
 
   const normalizeRect = (
     start: { x: number; y: number },
@@ -226,7 +235,7 @@ export default function PreviewPane({
       >
         <img
           className="preview-image"
-          src={fallbackDataUrl ?? resolvedSrc}
+          src={stableSrc}
           alt={imageLabel}
           draggable={false}
           onError={() => {
@@ -246,6 +255,8 @@ export default function PreviewPane({
               })
           }}
           onLoad={(event) => {
+            setStableSrc(currentWantedSrc)
+            setIsLoaded(true)
             setFallbackDataUrl(null)
             const target = event.currentTarget
             setNaturalSize({
@@ -258,8 +269,12 @@ export default function PreviewPane({
             top: `${displayRect.y}px`,
             width: `${displayRect.w}px`,
             height: `${displayRect.h}px`,
+            opacity: isLoaded ? 1 : 1,
           }}
         />
+        {!isLoaded && currentWantedSrc !== stableSrc ? (
+          <div className="preview-loading">Loading image…</div>
+        ) : null}
         {outlineRect ? (
           <div
             className="preview-outline"
