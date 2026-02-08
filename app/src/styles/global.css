@@ -68,6 +68,26 @@ textarea {
     linear-gradient(180deg, #eef1ec 0%, #e6e9e2 100%);
 }
 
+.app-topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--ws-gap-2);
+  padding: 2px 4px;
+}
+
+.topbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--ws-gap-1);
+}
+
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--ws-gap-1);
+}
+
 .app-header {
   display: flex;
   align-items: center;
@@ -96,6 +116,13 @@ textarea {
   background: var(--bg-surface-elevated);
   padding: 6px;
   box-shadow: 0 10px 26px rgba(24, 30, 26, 0.08);
+}
+
+.app-logo-small {
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  padding: 4px;
 }
 
 .app-title {
@@ -136,13 +163,6 @@ textarea {
   min-width: 0;
   gap: var(--ws-gap-2);
   overflow: hidden;
-}
-
-.logo-block {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  padding: 4px 6px;
 }
 
 .right-pane {
@@ -197,10 +217,12 @@ textarea {
 
 .card h3 {
   margin: 0 0 var(--ws-gap-1) 0;
-  font-size: 12px;
-  letter-spacing: 0.08em;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(28, 31, 29, 0.08);
+  font-size: 11px;
+  letter-spacing: 0.12em;
   text-transform: uppercase;
-  color: rgba(59, 64, 61, 0.7);
+  color: rgba(59, 64, 61, 0.6);
 }
 
 .field-row {
@@ -303,6 +325,11 @@ select.input {
     border-color 120ms ease-out, background 120ms ease-out;
   appearance: none;
   -webkit-appearance: none;
+}
+
+.button-pill {
+  border-radius: 999px;
+  padding: 0 16px;
 }
 
 .button:hover {
@@ -507,10 +534,14 @@ select.input {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid rgba(28, 31, 29, 0.08);
 }
 
 .preview-header h3 {
   margin: 0;
+  font-size: 14px;
+  letter-spacing: 0.08em;
 }
 
 .preview-area {

@@ -265,12 +265,26 @@ export default function AppShell() {
 
   return (
     <div className="app-shell">
+      <header className="app-topbar">
+        <div className="topbar-left">
+          <img className="app-logo app-logo-small" src={logo} alt="WaveformOS logo" />
+        </div>
+        <div className="topbar-actions">
+          <button className="button icon-button icon-button-circle" type="button">
+            ?
+          </button>
+          <button
+            className="button button-primary button-pill"
+            type="button"
+            onClick={handleExport}
+            disabled={exportDisabled}
+          >
+            Export
+          </button>
+        </div>
+      </header>
       <main className="app-main">
         <aside className="left-rail">
-          <div className="logo-block">
-            <img className="app-logo" src={logo} alt="WaveformOS logo" />
-          </div>
-
           <section className="panel-stack">
             <Card title="Input Folder">
             <FieldRow label="Input folder">
