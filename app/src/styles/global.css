@@ -62,6 +62,10 @@ textarea {
   gap: var(--ws-gap-2);
   padding: 12px 18px 10px;
   overflow: hidden;
+  background:
+    radial-gradient(120% 80% at 20% 0%, rgba(255, 255, 255, 0.85), transparent 60%),
+    radial-gradient(140% 110% at 80% 10%, rgba(255, 255, 255, 0.6), transparent 55%),
+    linear-gradient(180deg, #eef1ec 0%, #e6e9e2 100%);
 }
 
 .app-header {
@@ -134,6 +138,7 @@ textarea {
   overflow-x: hidden;
   max-height: 100%;
   flex: 0 0 420px;
+  padding: 2px;
 }
 
 .panel-stack::-webkit-scrollbar {
@@ -149,16 +154,18 @@ textarea {
 
 .card {
   min-width: 0;
-  border: 1px solid rgba(28, 31, 29, 0.06);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(248, 249, 246, 0.96));
-  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-glass);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.85), rgba(244, 246, 241, 0.78));
+  border-radius: 20px;
   padding: var(--ws-pad-card);
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6), 0 18px 40px rgba(24, 30, 26, 0.08);
+  box-shadow: var(--inset-highlight), var(--shadow-panel);
   transition: box-shadow 160ms ease-out, transform 160ms ease-out;
+  backdrop-filter: blur(14px);
 }
 
 .card:hover {
-  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65), 0 24px 56px rgba(24, 30, 26, 0.12);
+  box-shadow: var(--inset-highlight), var(--shadow-hover);
   transform: translateY(-1px);
 }
 
@@ -207,17 +214,19 @@ textarea {
 .input {
   flex: 1 1 220px;
   height: var(--ws-control-h);
-  border-radius: var(--radius-md);
+  border-radius: 11px;
   border: 1px solid var(--border-subtle);
   padding: 0 12px;
-  background: linear-gradient(180deg, #fdfdfb 0%, #f3f5f1 100%);
+  background: var(--control-bg);
   color: var(--text-secondary);
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  box-shadow: inset 0 1px 2px rgba(24, 30, 26, 0.08);
+  box-shadow: var(--inset-highlight), var(--control-inset);
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .input.input-short {
@@ -229,6 +238,7 @@ textarea {
 .input:disabled {
   color: var(--text-muted);
   background: #eef0ec;
+  box-shadow: none;
 }
 
 .field-control select.input {
@@ -238,47 +248,61 @@ textarea {
 
 select.input {
   line-height: normal;
-  padding-right: 28px;
+  padding-right: 30px;
+}
+
+.select,
+select.input {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%236f7671' d='M1.4 0.9 6 5.5 10.6 0.9 12 2.3 6 8 0 2.3z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
 }
 
 .button {
   height: var(--ws-control-h);
   padding: 0 12px;
-  border-radius: var(--radius-md);
+  border-radius: 11px;
   border: 1px solid var(--border-subtle);
-  background: linear-gradient(180deg, #f7f8f5 0%, #eff1ed 100%);
+  background: var(--control-bg);
   color: var(--text-secondary);
   font-weight: 600;
   cursor: pointer;
   flex: 0 0 auto;
   white-space: nowrap;
+  box-shadow: var(--inset-highlight), 0 8px 18px rgba(24, 30, 26, 0.12);
   transition: transform 120ms ease-out, box-shadow 120ms ease-out,
     border-color 120ms ease-out, background 120ms ease-out;
+  appearance: none;
+  -webkit-appearance: none;
 }
 
 .button:hover {
   border-color: rgba(56, 122, 242, 0.35);
-  background: linear-gradient(180deg, #fafbf8 0%, #f0f2ee 100%);
+  background: var(--control-bg-hover);
 }
 
 .button:active {
   transform: translateY(0);
-  box-shadow: inset 0 2px 4px rgba(24, 30, 26, 0.12);
+  background: var(--control-bg-active);
+  box-shadow: var(--control-inset);
 }
 
 .button-primary {
-  background: linear-gradient(180deg, #4a88f5 0%, #2f6fe2 100%);
+  background: linear-gradient(180deg, #5593ff 0%, #2e6be0 100%);
   color: #ffffff;
   border-color: rgba(56, 122, 242, 0.5);
-  box-shadow: 0 12px 26px rgba(47, 106, 212, 0.25);
+  box-shadow: var(--inset-highlight), 0 14px 26px rgba(47, 106, 212, 0.28);
 }
 
 .button-primary:hover {
-  background: linear-gradient(180deg, #5a94f7 0%, #3879eb 100%);
+  background: linear-gradient(180deg, #67a0ff 0%, #3776ea 100%);
 }
 
 .button-subtle {
-  background: linear-gradient(180deg, #f8f9f6 0%, #eff1ec 100%);
+  background: linear-gradient(180deg, #f9faf7 0%, #edf0ea 100%);
   color: var(--text-secondary);
 }
 
@@ -556,7 +580,7 @@ select.input {
 
 .status-strip {
   height: 36px;
-  border-radius: 10px;
+  border-radius: 12px;
   border: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   display: grid;
@@ -572,6 +596,35 @@ select.input {
   display: flex;
   gap: var(--ws-gap-1);
   margin-top: var(--ws-gap-1);
+}
+
+.segmented {
+  display: inline-flex;
+  gap: 4px;
+  padding: 4px;
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: var(--inset-highlight);
+}
+
+.segmented-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: transparent;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
+}
+
+.segmented-button.is-active {
+  color: var(--accent);
+  background: linear-gradient(180deg, rgba(83, 142, 255, 0.22), rgba(45, 105, 223, 0.18));
+  box-shadow: inset 0 0 0 1px rgba(56, 122, 242, 0.35);
 }
 
 .status-pills {
@@ -613,6 +666,36 @@ select.input {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.bottom-strip {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ws-gap-2);
+  padding: 10px 14px;
+  border-radius: 16px;
+  border: 1px solid var(--border-glass);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.8), rgba(244, 246, 241, 0.7));
+  box-shadow: var(--inset-highlight), var(--shadow-soft);
+  backdrop-filter: blur(16px);
+}
+
+.bottom-strip-left,
+.bottom-strip-center,
+.bottom-strip-right {
+  display: flex;
+  align-items: center;
+  gap: var(--ws-gap-1);
+  min-width: 0;
+}
+
+.bottom-strip-center {
+  justify-content: center;
+}
+
+.bottom-strip-right {
+  justify-content: flex-end;
 }
 
 .toast {
