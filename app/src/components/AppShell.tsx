@@ -2,10 +2,10 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import { open } from '@tauri-apps/plugin-dialog'
 import { listen } from '@tauri-apps/api/event'
 import { useEffect, useState } from 'react'
+import logo from '../assets/Logo.png'
 import sampleImage from '../assets/sample.png'
 import Card from './Card'
 import FieldRow from './FieldRow'
-import Header from './Header'
 import PreviewPane from './PreviewPane'
 import Toggle from './Toggle'
 
@@ -247,11 +247,14 @@ export default function AppShell() {
 
   return (
     <div className="app-shell">
-      <Header onExport={handleExport} exportDisabled={exportDisabled} />
-
       <main className="app-main">
-        <section className="panel-stack">
-          <Card title="Input">
+        <aside className="left-rail">
+          <div className="logo-block">
+            <img className="app-logo" src={logo} alt="WaveformOS logo" />
+          </div>
+
+          <section className="panel-stack">
+            <Card title="Input Folder">
             <FieldRow label="Input folder">
               <input
                 className="input"
@@ -263,23 +266,27 @@ export default function AppShell() {
                 Choose...
               </button>
             </FieldRow>
-            <FieldRow label="Sample image">
-              <select
-                className="input"
-                value={selectedImagePath ?? ''}
-                onChange={(event) => setSelectedImagePath(event.target.value)}
-                disabled={imageList.length === 0}
-              >
-                {imageList.length === 0 ? (
-                  <option value="">No images</option>
-                ) : null}
-                {imageList.map((entry) => (
-                  <option key={entry.path} value={entry.path}>
-                    {entry.name}
-                  </option>
-                ))}
-              </select>
-            </FieldRow>
+              <p className="helper-text">{inputHelper}</p>
+            </Card>
+
+            <Card title="Sample Image">
+              <FieldRow label="Sample image">
+                <select
+                  className="input"
+                  value={selectedImagePath ?? ''}
+                  onChange={(event) => setSelectedImagePath(event.target.value)}
+                  disabled={imageList.length === 0}
+                >
+                  {imageList.length === 0 ? (
+                    <option value="">No images</option>
+                  ) : null}
+                  {imageList.map((entry) => (
+                    <option key={entry.path} value={entry.path}>
+                      {entry.name}
+                    </option>
+                  ))}
+                </select>
+              </FieldRow>
             <div className="sample-selected">
               <img
                 className="sample-thumb"
@@ -313,10 +320,9 @@ export default function AppShell() {
                 <span className="sample-selected-sub">{sampleSubtext}</span>
               </div>
             </div>
-            <p className="helper-text">{inputHelper}</p>
-          </Card>
+            </Card>
 
-          <Card title="Crop">
+            <Card title="Define Crop">
             <FieldRow label="Region">
               <div className="field-group">
                 <input
@@ -354,162 +360,187 @@ export default function AppShell() {
               >
                 Clear selection
               </button>
-              <button className="button" type="button" disabled>
-                Center to safe area
-              </button>
+                <button className="button" type="button" disabled>
+                  Center to safe area
+                </button>
+              </div>
+            </Card>
+
+            <Card title="Screen Shape">
+              <FieldRow label="Shape">
+                <select
+                  className="input"
+                  value={shape}
+                  onChange={(event) =>
+                    setShape(event.target.value as 'rectangle' | 'rounded')
+                  }
+                >
+                  <option value="rectangle">Rectangle</option>
+                  <option value="rounded">Rounded Screen</option>
+                </select>
+              </FieldRow>
+              <FieldRow label="Corner radius">
+                <input
+                  className="input"
+                  type="number"
+                  value={cornerRadiusPx}
+                  min={0}
+                  disabled={shape !== 'rounded'}
+                  onChange={(event) => setCornerRadiusPx(Number(event.target.value))}
+                />
+              </FieldRow>
+              <FieldRow label="Inset (px)">
+                <input
+                  className="input"
+                  type="number"
+                  value={insetPx}
+                  min={0}
+                  disabled={shape !== 'rounded'}
+                  onChange={(event) => setInsetPx(Number(event.target.value))}
+                />
+              </FieldRow>
+              <p className="helper-text">Affects preview + export mask.</p>
+              <Toggle
+                label="Transparent PNG"
+                checked={transparentPng}
+                onChange={setTransparentPng}
+              />
+              <Toggle
+                label="Show mask outline"
+                checked={showMaskOutline}
+                onChange={setShowMaskOutline}
+              />
+              <Toggle
+                label="Dim masked area"
+                checked={dimMaskedArea}
+                onChange={setDimMaskedArea}
+              />
+            </Card>
+          </section>
+        </aside>
+
+        <section className="right-pane">
+          <PreviewPane
+            imageSrc={previewSrc}
+            imageLabel={previewLabel}
+            shape={shape}
+            cornerRadiusPx={cornerRadiusPx}
+            insetPx={insetPx}
+            showMaskOutline={showMaskOutline}
+            dimMaskedArea={dimMaskedArea}
+            cropRect={cropRect}
+            setCropRect={setCropRect}
+            isSelecting={isSelecting}
+            setIsSelecting={setIsSelecting}
+          />
+
+          <div className="bottom-strip">
+            <div className="bottom-strip-main">
+              <div className="bottom-strip-left">
+                <div className="crop-readout">
+                  <span>Crop</span>
+                  <strong>
+                    {cropRect ? `${cropRect.w}x${cropRect.h}` : '--'}
+                  </strong>
+                </div>
+                <div className="status-text">
+                  <span>{statusText}</span>
+                  {lastExportPath ? (
+                    <span className="status-meta">Last export: {lastExportPath}</span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="bottom-strip-center">
+                <div className="preset-row">
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => setTargetSize({ w: 1600, h: 1200 })}
+                  >
+                    1600x1200
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => setTargetSize({ w: 1024, h: 768 })}
+                  >
+                    1024x768
+                  </button>
+                  <button
+                    className="button"
+                    type="button"
+                    onClick={() => setTargetSize({ w: 640, h: 480 })}
+                  >
+                    640x480
+                  </button>
+                  <span className="preset-chip">4:3</span>
+                </div>
+              </div>
+              <div className="bottom-strip-right">
+                <button
+                  className="button button-subtle"
+                  type="button"
+                  onClick={() => setIsSelecting(true)}
+                >
+                  Preview Crop
+                </button>
+                <button
+                  className="button button-primary"
+                  type="button"
+                  onClick={handleExport}
+                  disabled={exportDisabled}
+                >
+                  Batch Export
+                </button>
+              </div>
             </div>
-          </Card>
 
-          <Card title="Screen Shape">
-            <FieldRow label="Shape">
-              <select
-                className="input"
-                value={shape}
-                onChange={(event) =>
-                  setShape(event.target.value as 'rectangle' | 'rounded')
-                }
-              >
-                <option value="rectangle">Rectangle</option>
-                <option value="rounded">Rounded Screen</option>
-              </select>
-            </FieldRow>
-            <FieldRow label="Corner radius">
-              <input
-                className="input"
-                type="number"
-                value={cornerRadiusPx}
-                min={0}
-                disabled={shape !== 'rounded'}
-                onChange={(event) => setCornerRadiusPx(Number(event.target.value))}
-              />
-            </FieldRow>
-            <FieldRow label="Inset (px)">
-              <input
-                className="input"
-                type="number"
-                value={insetPx}
-                min={0}
-                disabled={shape !== 'rounded'}
-                onChange={(event) => setInsetPx(Number(event.target.value))}
-              />
-            </FieldRow>
-            <p className="helper-text">Affects preview + export mask.</p>
-            <Toggle
-              label="Transparent PNG"
-              checked={transparentPng}
-              onChange={setTransparentPng}
-            />
-            <Toggle
-              label="Show mask outline"
-              checked={showMaskOutline}
-              onChange={setShowMaskOutline}
-            />
-            <Toggle
-              label="Dim masked area"
-              checked={dimMaskedArea}
-              onChange={setDimMaskedArea}
-            />
-          </Card>
-
-          <Card title="Output">
-            <FieldRow label="Output folder">
-              <input
-                className="input"
-                type="text"
-                value={outputDir ?? 'Not set'}
-                readOnly
-              />
-              <button className="button" type="button" onClick={handleChooseOutput}>
-                Choose...
-              </button>
-            </FieldRow>
-            <FieldRow label="Filename mode">
-              <select
-                className="input"
-                value={filenameMode}
-                onChange={(event) =>
-                  setFilenameMode(event.target.value as 'ui' | 'cropped')
-                }
-              >
-                <option value="ui">UI (keep name)</option>
-                <option value="cropped">Cropped suffix</option>
-              </select>
-            </FieldRow>
-            <div className="preset-row">
-              <button
-                className="button"
-                type="button"
-                onClick={() => setTargetSize({ w: 1600, h: 1200 })}
-              >
-                1600x1200
-              </button>
-              <button
-                className="button"
-                type="button"
-                onClick={() => setTargetSize({ w: 1024, h: 768 })}
-              >
-                1024x768
-              </button>
-              <button
-                className="button"
-                type="button"
-                onClick={() => setTargetSize({ w: 640, h: 480 })}
-              >
-                640x480
-              </button>
-              <span className="preset-chip">4:3</span>
+            <div className="bottom-strip-output">
+              <div className="output-inline">
+                <span className="output-label">Output folder</span>
+                <input
+                  className="input"
+                  type="text"
+                  value={outputDir ?? 'Not set'}
+                  readOnly
+                />
+                <button className="button" type="button" onClick={handleChooseOutput}>
+                  Choose...
+                </button>
+              </div>
+              <div className="output-inline">
+                <span className="output-label">Filename</span>
+                <select
+                  className="input"
+                  value={filenameMode}
+                  onChange={(event) =>
+                    setFilenameMode(event.target.value as 'ui' | 'cropped')
+                  }
+                >
+                  <option value="ui">UI (keep name)</option>
+                  <option value="cropped">Cropped suffix</option>
+                </select>
+              </div>
+              <div className="status-actions">
+                <div className="progress-track" aria-hidden="true">
+                  <div
+                    className="progress-fill"
+                    style={{ width: `${Math.round(progressRatio * 100)}%` }}
+                  />
+                </div>
+                <button
+                  className="button button-subtle button-small"
+                  type="button"
+                  onClick={handleCancelExport}
+                  disabled={!isExporting || isCancelling}
+                >
+                  Cancel
+                </button>
+              </div>
             </div>
-          </Card>
-        </section>
-
-        <PreviewPane
-          imageSrc={previewSrc}
-          imageLabel={previewLabel}
-          shape={shape}
-          cornerRadiusPx={cornerRadiusPx}
-          insetPx={insetPx}
-          showMaskOutline={showMaskOutline}
-          dimMaskedArea={dimMaskedArea}
-          cropRect={cropRect}
-          setCropRect={setCropRect}
-          isSelecting={isSelecting}
-          setIsSelecting={setIsSelecting}
-        />
-      </main>
-
-      <footer className="status-strip">
-        <div className="status-pills">
-          <span className={`status-pill ${!isExporting ? 'is-active' : ''}`}>
-            Idle
-          </span>
-          <span className="status-pill">Ready</span>
-          <span className={`status-pill ${isExporting ? 'is-active' : ''}`}>
-            Exporting
-          </span>
-        </div>
-        <div className="status-text">
-          <span>{statusText}</span>
-          {lastExportPath ? (
-            <span className="status-meta">Last export: {lastExportPath}</span>
-          ) : null}
-        </div>
-        <div className="status-actions">
-          <div className="progress-track" aria-hidden="true">
-            <div
-              className="progress-fill"
-              style={{ width: `${Math.round(progressRatio * 100)}%` }}
-            />
           </div>
-          <button
-            className="button button-subtle button-small"
-            type="button"
-            onClick={handleCancelExport}
-            disabled={!isExporting || isCancelling}
-          >
-            Cancel
-          </button>
-        </div>
-      </footer>
+        </section>
+      </main>
 
       <div className="toast-host" aria-live="polite">
         {toast ? (

@@ -122,10 +122,36 @@ textarea {
   flex: 1;
   min-height: 0;
   min-width: 0;
-  display: flex;
+  display: grid;
+  grid-template-columns: 420px minmax(0, 1fr);
   gap: var(--ws-gap-2);
   overflow: hidden;
   overflow-x: hidden;
+}
+
+.left-rail {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  gap: var(--ws-gap-2);
+  overflow: hidden;
+}
+
+.logo-block {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  padding: 4px 6px;
+}
+
+.right-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--ws-gap-2);
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
 }
 
 .panel-stack {
@@ -137,7 +163,7 @@ textarea {
   overflow-y: auto;
   overflow-x: hidden;
   max-height: 100%;
-  flex: 0 0 420px;
+  flex: 1 1 auto;
   padding: 2px;
 }
 
@@ -670,7 +696,7 @@ select.input {
 
 .bottom-strip {
   display: grid;
-  grid-template-columns: auto minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: var(--ws-gap-2);
   padding: 10px 14px;
@@ -681,9 +707,17 @@ select.input {
   backdrop-filter: blur(16px);
 }
 
+.bottom-strip-main {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--ws-gap-2);
+}
+
 .bottom-strip-left,
 .bottom-strip-center,
-.bottom-strip-right {
+.bottom-strip-right,
+.bottom-strip-output {
   display: flex;
   align-items: center;
   gap: var(--ws-gap-1);
@@ -696,6 +730,51 @@ select.input {
 
 .bottom-strip-right {
   justify-content: flex-end;
+}
+
+.bottom-strip-output {
+  justify-content: space-between;
+  gap: var(--ws-gap-2);
+  border-top: 1px solid rgba(255, 255, 255, 0.4);
+  padding-top: var(--ws-gap-1);
+}
+
+.output-inline {
+  display: flex;
+  align-items: center;
+  gap: var(--ws-gap-1);
+  min-width: 0;
+}
+
+.output-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+}
+
+.output-inline .input {
+  min-width: 160px;
+  flex: 1 1 auto;
+}
+
+.crop-readout {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 11px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.crop-readout strong {
+  font-size: 14px;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+  font-weight: 700;
+  text-transform: none;
 }
 
 .toast {
