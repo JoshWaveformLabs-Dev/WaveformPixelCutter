@@ -126,15 +126,37 @@ export default function PreviewPane({
     }
     return imageSrc
   }, [imageSrc])
-  const [stableSrc, setStableSrc] = useState<string>(() => resolvedSrc)
+  const [displayedSrc, setDisplayedSrc] = useState<string>(() => resolvedSrc)
   const [isLoaded, setIsLoaded] = useState<boolean>(false)
   const currentWantedSrc = fallbackDataUrl ?? resolvedSrc
+  const warnedRef = useRef<string | null>(null)
 
   useEffect(() => {
-    if (currentWantedSrc !== stableSrc) {
-      setIsLoaded(false)
+    setIsLoaded(false)
+    const preload = new Image()
+    preload.onload = () => {
+      setDisplayedSrc(resolvedSrc)
+      setFallbackDataUrl(null)
     }
-  }, [currentWantedSrc, stableSrc])
+    preload.onerror = () => {
+      if (warnedRef.current !== resolvedSrc) {
+        console.warn('Preview image failed to preload:', resolvedSrc)
+        warnedRef.current = resolvedSrc
+      }
+      if (!isLocalPath(imageSrc)) {
+        return
+      }
+      invoke<string>('read_image_data_url', { path: imageSrc })
+        .then((dataUrl) => {
+          setFallbackDataUrl(dataUrl)
+          setDisplayedSrc(dataUrl)
+        })
+        .catch((error) => {
+          console.warn('Preview image data url failed:', error)
+        })
+    }
+    preload.src = resolvedSrc
+  }, [imageSrc, resolvedSrc])
 
   const normalizeRect = (
     start: { x: number; y: number },
@@ -240,13 +262,13 @@ export default function PreviewPane({
       >
         <img
           className="preview-image"
-          src={stableSrc}
+          src={displayedSrc}
           alt={imageLabel}
           draggable={false}
           onError={() => {
             console.warn(
               'Preview image failed to load, requesting data url:',
-              resolvedSrc,
+              displayedSrc,
             )
             if (!isLocalPath(imageSrc)) {
               return
@@ -254,13 +276,13 @@ export default function PreviewPane({
             invoke<string>('read_image_data_url', { path: imageSrc })
               .then((dataUrl) => {
                 setFallbackDataUrl(dataUrl)
+                setDisplayedSrc(dataUrl)
               })
               .catch((error) => {
                 console.warn('Preview image data url failed:', error)
               })
           }}
           onLoad={(event) => {
-            setStableSrc(currentWantedSrc)
             setIsLoaded(true)
             setFallbackDataUrl(null)
             const target = event.currentTarget
@@ -277,7 +299,7 @@ export default function PreviewPane({
             opacity: isLoaded ? 1 : 1,
           }}
         />
-        {!isLoaded && currentWantedSrc !== stableSrc ? (
+        {!isLoaded && currentWantedSrc !== displayedSrc ? (
           <div className="preview-loading">Loading image…</div>
         ) : null}
         {outlineRect ? (

@@ -494,7 +494,8 @@ select.input {
 .preview-card {
   display: flex;
   flex-direction: column;
-  gap: var(--ws-gap-1);
+  gap: 6px;
+  padding: 8px;
   height: 100%;
   flex: 1 1 auto;
   min-height: 0;
@@ -505,7 +506,7 @@ select.input {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: var(--ws-gap-1);
+  gap: 6px;
 }
 
 .preview-header h3 {
