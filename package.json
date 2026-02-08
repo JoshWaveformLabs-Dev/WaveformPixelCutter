@@ -1,0 +1,13 @@
+{
+  "name": "waveformos-pixel-cutter",
+  "version": "0.1.0",
+  "main": "app/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "dev": "electron ."
+  },
+  "devDependencies": {
+    "electron": "^31.0.0"
+  }
+}

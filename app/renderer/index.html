@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WaveformOS Pixel Cutter</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="window">
+      <header class="topbar">
+        <button class="logo-button" type="button" aria-label="WaveformOS">
+          <img src="../../assets/Logo.png" alt="WaveformOS Logo" />
+        </button>
+        <div class="title-block" aria-label="WaveformOS Pixel Cutter">
+          <span class="title-strong">WaveformOS</span>
+          <span class="title-accent">Pixel Cutter</span>
+        </div>
+        <div class="top-actions">
+          <button class="icon-button" type="button" aria-label="Menu">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M4 7h16M4 12h16M4 17h16"
+                stroke="currentColor"
+                stroke-width="1.6"
+                stroke-linecap="round"
+              />
+            </svg>
+          </button>
+          <button class="icon-button" type="button" aria-label="Settings">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M12 8.2a3.8 3.8 0 1 1 0 7.6 3.8 3.8 0 0 1 0-7.6Zm7.3 3.8c0-.3 0-.7-.1-1l2-1.6-1.7-3-2.4 1a7.9 7.9 0 0 0-1.7-1l-.3-2.5H10l-.3 2.5c-.6.2-1.2.6-1.7 1l-2.4-1-1.7 3 2 1.6c-.1.3-.1.7-.1 1s0 .7.1 1l-2 1.6 1.7 3 2.4-1c.5.4 1.1.7 1.7 1l.3 2.5h4.6l.3-2.5c.6-.2 1.2-.6 1.7-1l2.4 1 1.7-3-2-1.6c.1-.3.1-.7.1-1Z"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.4"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </div>
+      </header>
+
+      <div class="content">
+        <aside class="sidebar">
+          <button class="folder-row" type="button" data-role="input-folder">
+            <span class="folder-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3.5 6.5h6l1.7 2H20a1.5 1.5 0 0 1 1.5 1.5v7.5A1.5 1.5 0 0 1 20 19h-14A1.5 1.5 0 0 1 4.5 17.5V8A1.5 1.5 0 0 1 6 6.5Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="folder-text">
+              <span class="folder-title">Input Folder</span>
+              <span class="folder-meta" data-role="input-path">Select folder</span>
+            </span>
+            <span class="chevron">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="m9 6 6 6-6 6"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+
+          <button class="folder-row" type="button" data-role="output-folder">
+            <span class="folder-icon">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3.5 6.5h6l1.7 2H20a1.5 1.5 0 0 1 1.5 1.5v7.5A1.5 1.5 0 0 1 20 19h-14A1.5 1.5 0 0 1 4.5 17.5V8A1.5 1.5 0 0 1 6 6.5Z"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.4"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+            <span class="folder-text">
+              <span class="folder-title">Output Folder</span>
+              <span class="folder-meta" data-role="output-path">Select folder</span>
+            </span>
+            <span class="chevron">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="m9 6 6 6-6 6"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+            </span>
+          </button>
+
+          <div class="thumb-grid" data-role="thumb-grid"></div>
+          <div class="thumb-count" data-role="image-count">0 Images</div>
+        </aside>
+
+        <section class="preview-panel">
+          <div class="preview-card">
+            <div class="preview-placeholder" data-role="preview-placeholder">
+              No image selected
+            </div>
+            <img
+              class="preview-image"
+              data-role="preview-image"
+              alt="Selected preview"
+            />
+          </div>
+
+          <div class="bottom-bar">
+            <div class="format-group">
+              <span class="format-label">Format.</span>
+              <div class="chip-row" role="group" aria-label="Format selection">
+                <button class="chip is-selected" type="button" data-format="png">
+                  PNG
+                </button>
+                <button class="chip" type="button" data-format="jpg">JPG</button>
+                <button class="chip" type="button" data-format="webp">
+                  WebP
+                </button>
+              </div>
+            </div>
+            <button
+              class="primary-button"
+              type="button"
+              data-role="export-button"
+              disabled
+            >
+              Export Cropped Image
+            </button>
+          </div>
+        </section>
+      </div>
+    </div>
+
+    <script src="renderer.js"></script>
+  </body>
+</html>
