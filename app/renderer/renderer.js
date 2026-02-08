@@ -16,6 +16,8 @@ let inputFolder = null;
 let outputFolder = null;
 let selectedImagePath = null;
 let selectedFormat = "png";
+const TARGET_ASPECT = 4 / 3;
+const MASK_RADIUS_PX = 18;
 
 function setImageCount(count) {
   imageCountLabel.textContent = `${count} Images`;
@@ -47,6 +49,104 @@ function updateSelectedThumb(targetCard) {
   document.querySelectorAll(".thumb-card").forEach((card) => {
     card.classList.toggle("is-selected", card === targetCard);
   });
+}
+
+function loadImageFromDataUrl(dataUrl) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = dataUrl;
+  });
+}
+
+function getCenteredCropRect(srcWidth, srcHeight, targetAspect) {
+  const srcAspect = srcWidth / srcHeight;
+  if (srcAspect > targetAspect) {
+    const cropWidth = Math.round(srcHeight * targetAspect);
+    return {
+      x: Math.round((srcWidth - cropWidth) / 2),
+      y: 0,
+      width: cropWidth,
+      height: srcHeight
+    };
+  }
+  const cropHeight = Math.round(srcWidth / targetAspect);
+  return {
+    x: 0,
+    y: Math.round((srcHeight - cropHeight) / 2),
+    width: srcWidth,
+    height: cropHeight
+  };
+}
+
+function drawRoundedRectPath(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, width / 2, height / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+}
+
+async function exportCroppedImage() {
+  const dataUrl = await window.waveformApi.readImageAsDataUrl(selectedImagePath);
+  const img = await loadImageFromDataUrl(dataUrl);
+  const crop = getCenteredCropRect(img.naturalWidth, img.naturalHeight, TARGET_ASPECT);
+  const outWidth = crop.width;
+  const outHeight = crop.height;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outWidth;
+  canvas.height = outHeight;
+  const ctx = canvas.getContext("2d");
+  ctx.clearRect(0, 0, outWidth, outHeight);
+
+  ctx.save();
+  drawRoundedRectPath(ctx, 0, 0, outWidth, outHeight, MASK_RADIUS_PX);
+  ctx.clip();
+  ctx.drawImage(
+    img,
+    crop.x,
+    crop.y,
+    crop.width,
+    crop.height,
+    0,
+    0,
+    outWidth,
+    outHeight
+  );
+  ctx.restore();
+
+  console.log("Export crop", crop, "output", { width: outWidth, height: outHeight }, "source", selectedImagePath);
+
+  const mime =
+    selectedFormat === "jpg" || selectedFormat === "jpeg"
+      ? "image/jpeg"
+      : selectedFormat === "webp"
+        ? "image/webp"
+        : "image/png";
+
+  const blob = await new Promise((resolve) =>
+    canvas.toBlob(resolve, mime)
+  );
+  if (!blob) {
+    throw new Error("Failed to create export image.");
+  }
+
+  const buffer = new Uint8Array(await blob.arrayBuffer());
+  const fileName = selectedImagePath.split(/[\\/]/).pop() || "export";
+  const baseName = fileName.replace(/\.[^/.]+$/, "");
+  const extension = selectedFormat === "jpg" ? "jpg" : selectedFormat;
+  const outputPath = `${outputFolder}\\${baseName}-cropped.${extension}`;
+
+  await window.waveformApi.exportBufferToFile(buffer, outputPath);
 }
 
 async function refreshThumbnails() {
@@ -128,6 +228,9 @@ exportButton.addEventListener("click", () => {
   if (!selectedImagePath || !outputFolder) {
     return;
   }
+  exportCroppedImage().catch((error) => {
+    console.error("Export failed:", error);
+  });
 });
 
 clearThumbnails();
