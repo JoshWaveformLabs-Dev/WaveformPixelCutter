@@ -365,25 +365,27 @@ select.input {
   color: rgba(113, 120, 114, 0.8);
 }
 
-.sample-selected {
+.sample-selected,
+.sample-row {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 8px;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-  background: var(--bg-surface);
-  box-shadow: inset 0 1px 2px rgba(24, 30, 26, 0.06);
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: var(--inset-highlight), inset 0 1px 2px rgba(24, 30, 26, 0.08);
   margin-top: var(--ws-gap-1);
 }
 
 .sample-thumb {
-  width: 64px;
-  height: 48px;
-  border-radius: 8px;
+  width: 54px;
+  height: 54px;
+  border-radius: 12px;
   object-fit: cover;
-  border: 1px solid rgba(28, 31, 29, 0.08);
+  border: 1px solid rgba(28, 31, 29, 0.12);
   background: #ffffff;
+  box-shadow: inset 0 1px 2px rgba(24, 30, 26, 0.12);
   flex: 0 0 auto;
 }
 
@@ -395,8 +397,8 @@ select.input {
 }
 
 .sample-selected-name {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 700;
   color: var(--text-secondary);
   white-space: nowrap;
   overflow: hidden;
@@ -406,6 +408,18 @@ select.input {
 .sample-selected-sub {
   font-size: 11px;
   color: var(--text-muted);
+}
+
+.icon-button {
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  line-height: 1;
 }
 
 .toggle {

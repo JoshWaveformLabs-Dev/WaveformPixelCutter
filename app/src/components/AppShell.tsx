@@ -208,6 +208,20 @@ export default function AppShell() {
     }
   }
 
+  const handleCopySampleName = async () => {
+    try {
+      if (!navigator.clipboard) {
+        throw new Error('Clipboard unavailable')
+      }
+      await navigator.clipboard.writeText(previewLabel)
+      setToast({ type: 'success', message: 'Filename copied' })
+    } catch (error) {
+      const message =
+        error instanceof Error ? error.message : String(error ?? 'Copy failed')
+      setToast({ type: 'error', message })
+    }
+  }
+
   useEffect(() => {
     let unlisten: null | (() => void) = null
     listen<ExportProgress>('export_progress', (event) => {
@@ -287,39 +301,47 @@ export default function AppShell() {
                   ))}
                 </select>
               </FieldRow>
-            <div className="sample-selected">
-              <img
-                className="sample-thumb"
-                src={thumbFallbackDataUrl ?? thumbSrc}
-                alt={previewLabel}
-                draggable={false}
-                onLoad={() => {
-                  setThumbFallbackDataUrl(null)
-                }}
-                onError={() => {
-                  console.warn(
-                    'Sample thumb failed to load, requesting data url:',
-                    thumbSrc,
-                  )
-                  if (!selectedImagePath || !isLocalPath(selectedImagePath)) {
-                    return
-                  }
-                  invoke<string>('read_image_data_url', {
-                    path: selectedImagePath,
-                  })
-                    .then((dataUrl) => {
-                      setThumbFallbackDataUrl(dataUrl)
+              <div className="sample-row">
+                <img
+                  className="sample-thumb"
+                  src={thumbFallbackDataUrl ?? thumbSrc}
+                  alt={previewLabel}
+                  draggable={false}
+                  onLoad={() => {
+                    setThumbFallbackDataUrl(null)
+                  }}
+                  onError={() => {
+                    console.warn(
+                      'Sample thumb failed to load, requesting data url:',
+                      thumbSrc,
+                    )
+                    if (!selectedImagePath || !isLocalPath(selectedImagePath)) {
+                      return
+                    }
+                    invoke<string>('read_image_data_url', {
+                      path: selectedImagePath,
                     })
-                    .catch((error) => {
-                      console.warn('Sample thumb data url failed:', error)
-                    })
-                }}
-              />
-              <div className="sample-selected-meta">
-                <span className="sample-selected-name">{previewLabel}</span>
-                <span className="sample-selected-sub">{sampleSubtext}</span>
+                      .then((dataUrl) => {
+                        setThumbFallbackDataUrl(dataUrl)
+                      })
+                      .catch((error) => {
+                        console.warn('Sample thumb data url failed:', error)
+                      })
+                  }}
+                />
+                <div className="sample-selected-meta">
+                  <span className="sample-selected-name">{previewLabel}</span>
+                  <span className="sample-selected-sub">{sampleSubtext}</span>
+                </div>
+                <button
+                  className="button icon-button"
+                  type="button"
+                  onClick={handleCopySampleName}
+                  aria-label="Copy filename"
+                >
+                  ⧉
+                </button>
               </div>
-            </div>
             </Card>
 
             <Card title="Define Crop">
