@@ -64,6 +64,10 @@ export default function AppShell() {
     ? convertFileSrc(selectedImagePath)
     : sampleImage
   const previewLabel = selectedImage?.name ?? 'Sample input'
+  const sampleSubtext =
+    !selectedImagePath || imageList.length === 0 || !inputDir
+      ? 'Built-in sample'
+      : 'From input folder'
 
   const inputHelper = !inputDir
     ? 'Select a folder to load images.'
@@ -264,6 +268,18 @@ export default function AppShell() {
                 ))}
               </select>
             </FieldRow>
+            <div className="sample-selected">
+              <img
+                className="sample-thumb"
+                src={previewSrc}
+                alt={previewLabel}
+                draggable={false}
+              />
+              <div className="sample-selected-meta">
+                <span className="sample-selected-name">{previewLabel}</span>
+                <span className="sample-selected-sub">{sampleSubtext}</span>
+              </div>
+            </div>
             <p className="helper-text">{inputHelper}</p>
           </Card>
 
