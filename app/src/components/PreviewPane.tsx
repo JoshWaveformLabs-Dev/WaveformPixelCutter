@@ -225,7 +225,12 @@ export default function PreviewPane({
 
   return (
     <div className="card preview-card">
-      <h3>Preview</h3>
+      <div className="preview-header">
+        <h3>Preview</h3>
+        <button className="icon-button icon-button-circle" type="button" disabled>
+          ...
+        </button>
+      </div>
       <div
         className="preview-area"
         ref={containerRef}
