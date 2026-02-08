@@ -268,99 +268,101 @@ export default function PreviewPane({
           ...
         </button>
       </div>
-      <div
-        className="preview-area"
-        ref={containerRef}
-        onPointerMove={handlePointerMove}
-        onPointerDown={handlePointerDown}
-        onPointerLeave={handlePointerLeave}
-      >
-        <img
-          className="preview-image"
-          src={displayedSrc}
-          alt={imageLabel}
-          draggable={false}
-          onError={() => {
-            console.warn('Preview image failed to load:', resolvedSrc)
-            setIsImageLoading(false)
-            setIsImageLoaded(false)
-            setIsImageError(true)
-            if (!isLocalPath(imageSrc)) {
-              return
-            }
-            invoke<string>('read_image_data_url', { path: imageSrc })
-              .then((dataUrl) => {
-                setDisplayedSrc(dataUrl)
-                setIsImageLoading(true)
-                setIsImageLoaded(false)
+      <div className="preview-area">
+        <div
+          className="preview-viewport"
+          ref={containerRef}
+          onPointerMove={handlePointerMove}
+          onPointerDown={handlePointerDown}
+          onPointerLeave={handlePointerLeave}
+        >
+          <img
+            className="preview-image"
+            src={displayedSrc}
+            alt={imageLabel}
+            draggable={false}
+            onError={() => {
+              console.warn('Preview image failed to load:', resolvedSrc)
+              setIsImageLoading(false)
+              setIsImageLoaded(false)
+              setIsImageError(true)
+              if (!isLocalPath(imageSrc)) {
+                return
+              }
+              invoke<string>('read_image_data_url', { path: imageSrc })
+                .then((dataUrl) => {
+                  setDisplayedSrc(dataUrl)
+                  setIsImageLoading(true)
+                  setIsImageLoaded(false)
+                })
+                .catch((error) => {
+                  console.warn('Preview image data url failed:', error)
+                })
+            }}
+            onLoad={(event) => {
+              setIsImageLoaded(true)
+              setIsImageLoading(false)
+              setIsImageError(false)
+              const target = event.currentTarget
+              setNaturalSize({
+                width: target.naturalWidth,
+                height: target.naturalHeight,
               })
-              .catch((error) => {
-                console.warn('Preview image data url failed:', error)
-              })
-          }}
-          onLoad={(event) => {
-            setIsImageLoaded(true)
-            setIsImageLoading(false)
-            setIsImageError(false)
-            const target = event.currentTarget
-            setNaturalSize({
-              width: target.naturalWidth,
-              height: target.naturalHeight,
-            })
-          }}
-          style={{
-            left: `${displayRect.x}px`,
-            top: `${displayRect.y}px`,
-            width: `${displayRect.w}px`,
-            height: `${displayRect.h}px`,
-          }}
-        />
-        {isImageLoading && !isImageLoaded ? (
-          <div className="preview-loading">Loading image…</div>
-        ) : null}
-        {isImageError ? (
-          <div className="preview-loading">Failed to load image</div>
-        ) : null}
-        {outlineRect ? (
-          <div
-            className="preview-outline"
+            }}
             style={{
-              left: `${outlineRect.left}px`,
-              top: `${outlineRect.top}px`,
-              width: `${outlineRect.width}px`,
-              height: `${outlineRect.height}px`,
-              borderRadius: `${outlineRect.borderRadius}px`,
+              left: `${displayRect.x}px`,
+              top: `${displayRect.y}px`,
+              width: `${displayRect.w}px`,
+              height: `${displayRect.h}px`,
             }}
           />
-        ) : null}
-        {dimMaskedArea && outlineRect ? (
-          <div
-            className="preview-dim"
-            style={{
-              left: `${outlineRect.left}px`,
-              top: `${outlineRect.top}px`,
-              width: `${outlineRect.width}px`,
-              height: `${outlineRect.height}px`,
-              borderRadius: `${outlineRect.borderRadius}px`,
-            }}
-          />
-        ) : null}
-        {activePreviewRect ? (
-          <div
-            className="crop-rect"
-            style={{
-              left: `${activePreviewRect.left}px`,
-              top: `${activePreviewRect.top}px`,
-              width: `${activePreviewRect.width}px`,
-              height: `${activePreviewRect.height}px`,
-            }}
-          >
-            <span className="crop-handle is-tl" />
-            <span className="crop-handle is-tr" />
-            <span className="crop-handle is-br" />
-            <span className="crop-handle is-bl" />
-          </div>
-        ) : null}
+          {isImageLoading && !isImageLoaded ? (
+            <div className="preview-loading">Loading image…</div>
+          ) : null}
+          {isImageError ? (
+            <div className="preview-loading">Failed to load image</div>
+          ) : null}
+          {outlineRect ? (
+            <div
+              className="preview-outline"
+              style={{
+                left: `${outlineRect.left}px`,
+                top: `${outlineRect.top}px`,
+                width: `${outlineRect.width}px`,
+                height: `${outlineRect.height}px`,
+                borderRadius: `${outlineRect.borderRadius}px`,
+              }}
+            />
+          ) : null}
+          {dimMaskedArea && outlineRect ? (
+            <div
+              className="preview-dim"
+              style={{
+                left: `${outlineRect.left}px`,
+                top: `${outlineRect.top}px`,
+                width: `${outlineRect.width}px`,
+                height: `${outlineRect.height}px`,
+                borderRadius: `${outlineRect.borderRadius}px`,
+              }}
+            />
+          ) : null}
+          {activePreviewRect ? (
+            <div
+              className="crop-rect"
+              style={{
+                left: `${activePreviewRect.left}px`,
+                top: `${activePreviewRect.top}px`,
+                width: `${activePreviewRect.width}px`,
+                height: `${activePreviewRect.height}px`,
+              }}
+            >
+              <span className="crop-handle is-tl" />
+              <span className="crop-handle is-tr" />
+              <span className="crop-handle is-br" />
+              <span className="crop-handle is-bl" />
+            </div>
+          ) : null}
+        </div>
       </div>
       <div className="preview-footer">
         <span>Preview</span>
