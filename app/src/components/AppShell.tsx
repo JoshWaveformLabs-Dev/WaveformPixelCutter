@@ -55,6 +55,9 @@ export default function AppShell() {
     null,
   )
   const [toast, setToast] = useState<null | { type: 'success' | 'error'; message: string }>(null)
+  const [thumbFallbackDataUrl, setThumbFallbackDataUrl] = useState<string | null>(
+    null,
+  )
 
   const cropValue = (value: number) => (cropRect ? String(value) : '--')
 
@@ -64,11 +67,13 @@ export default function AppShell() {
     ? convertFileSrc(selectedImagePath)
     : sampleImage
   const previewLabel = selectedImage?.name ?? 'Sample input'
+  const isLocalPath = (value: string) =>
+    value.startsWith('\\\\?\\') ||
+    /^[a-zA-Z]:[\\/]/.test(value) ||
+    value.startsWith('\\\\')
   const thumbSrc = !selectedImagePath
     ? sampleImage
-    : selectedImagePath.startsWith('\\\\?\\') ||
-        /^[a-zA-Z]:[\\/]/.test(selectedImagePath) ||
-        selectedImagePath.startsWith('\\\\')
+    : isLocalPath(selectedImagePath)
       ? convertFileSrc(selectedImagePath)
       : selectedImagePath
   const sampleSubtext =
@@ -278,11 +283,29 @@ export default function AppShell() {
             <div className="sample-selected">
               <img
                 className="sample-thumb"
-                src={thumbSrc}
+                src={thumbFallbackDataUrl ?? thumbSrc}
                 alt={previewLabel}
                 draggable={false}
+                onLoad={() => {
+                  setThumbFallbackDataUrl(null)
+                }}
                 onError={() => {
-                  console.warn('Sample thumb failed to load:', thumbSrc)
+                  console.warn(
+                    'Sample thumb failed to load, requesting data url:',
+                    thumbSrc,
+                  )
+                  if (!selectedImagePath || !isLocalPath(selectedImagePath)) {
+                    return
+                  }
+                  invoke<string>('read_image_data_url', {
+                    path: selectedImagePath,
+                  })
+                    .then((dataUrl) => {
+                      setThumbFallbackDataUrl(dataUrl)
+                    })
+                    .catch((error) => {
+                      console.warn('Sample thumb data url failed:', error)
+                    })
                 }}
               />
               <div className="sample-selected-meta">

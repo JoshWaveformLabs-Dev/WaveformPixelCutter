@@ -1,4 +1,4 @@
-import { convertFileSrc } from '@tauri-apps/api/core'
+import { convertFileSrc, invoke } from '@tauri-apps/api/core'
 import type { PointerEvent } from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 
@@ -34,6 +34,7 @@ export default function PreviewPane({
   const [naturalSize, setNaturalSize] = useState({ width: 1600, height: 1200 })
   const [anchor, setAnchor] = useState<null | { x: number; y: number }>(null)
   const [current, setCurrent] = useState<null | { x: number; y: number }>(null)
+  const [fallbackDataUrl, setFallbackDataUrl] = useState<string | null>(null)
   const pointerIdRef = useRef<number | null>(null)
 
   useEffect(() => {
@@ -111,15 +112,16 @@ export default function PreviewPane({
   const outlineRadius =
     shape === 'rounded' ? cornerRadiusPx * displayRect.scale : 8
 
+  const isLocalPath = (value: string) =>
+    value.startsWith('\\\\?\\') ||
+    /^[a-zA-Z]:[\\/]/.test(value) ||
+    value.startsWith('\\\\')
+
   const resolvedSrc = useMemo(() => {
     if (/^(https?:|data:|blob:)/.test(imageSrc)) {
       return imageSrc
     }
-    if (
-      imageSrc.startsWith('\\\\?\\') ||
-      /^[a-zA-Z]:[\\/]/.test(imageSrc) ||
-      imageSrc.startsWith('\\\\')
-    ) {
+    if (isLocalPath(imageSrc)) {
       return convertFileSrc(imageSrc)
     }
     return imageSrc
@@ -224,13 +226,27 @@ export default function PreviewPane({
       >
         <img
           className="preview-image"
-          src={resolvedSrc}
+          src={fallbackDataUrl ?? resolvedSrc}
           alt={imageLabel}
           draggable={false}
           onError={() => {
-            console.warn('Preview image failed to load:', resolvedSrc)
+            console.warn(
+              'Preview image failed to load, requesting data url:',
+              resolvedSrc,
+            )
+            if (!isLocalPath(imageSrc)) {
+              return
+            }
+            invoke<string>('read_image_data_url', { path: imageSrc })
+              .then((dataUrl) => {
+                setFallbackDataUrl(dataUrl)
+              })
+              .catch((error) => {
+                console.warn('Preview image data url failed:', error)
+              })
           }}
           onLoad={(event) => {
+            setFallbackDataUrl(null)
             const target = event.currentTarget
             setNaturalSize({
               width: target.naturalWidth,

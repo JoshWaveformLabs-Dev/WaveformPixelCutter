@@ -1,3 +1,4 @@
+use base64::{engine::general_purpose, Engine as _};
 use image::imageops::FilterType;
 use image::{DynamicImage, Rgba};
 use serde::{Deserialize, Serialize};
@@ -111,6 +112,24 @@ fn list_images_in_dir(input_dir: String) -> Result<Vec<ImageEntry>, String> {
   }
   images.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
   Ok(images)
+}
+
+#[tauri::command]
+fn read_image_data_url(path: String) -> Result<String, String> {
+  let bytes = std::fs::read(&path).map_err(|err| format!("Read failed: {err}"))?;
+  let ext = Path::new(&path)
+    .extension()
+    .and_then(|ext| ext.to_str())
+    .unwrap_or("")
+    .to_lowercase();
+  let mime = match ext.as_str() {
+    "png" => "image/png",
+    "jpg" | "jpeg" => "image/jpeg",
+    "webp" => "image/webp",
+    _ => "application/octet-stream",
+  };
+  let encoded = general_purpose::STANDARD.encode(bytes);
+  Ok(format!("data:{mime};base64,{encoded}"))
 }
 
 #[tauri::command]
@@ -319,7 +338,8 @@ pub fn run() {
       export_single,
       export_batch,
       list_images_in_dir,
-      cancel_export
+      cancel_export,
+      read_image_data_url
     ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

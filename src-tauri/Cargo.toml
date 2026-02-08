@@ -25,3 +25,4 @@ tauri = { version = "2.9.5", features = [] }
 tauri-plugin-log = "2"
 image = "0.25"
 tauri-plugin-dialog = "2"
+base64 = "0.22"
