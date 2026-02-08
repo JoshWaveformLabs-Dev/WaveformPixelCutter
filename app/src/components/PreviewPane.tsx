@@ -130,32 +130,43 @@ export default function PreviewPane({
   const [isLoaded, setIsLoaded] = useState<boolean>(false)
   const currentWantedSrc = fallbackDataUrl ?? resolvedSrc
   const warnedRef = useRef<string | null>(null)
+  const preloadTimerRef = useRef<number | null>(null)
 
   useEffect(() => {
     setIsLoaded(false)
-    const preload = new Image()
-    preload.onload = () => {
-      setDisplayedSrc(resolvedSrc)
-      setFallbackDataUrl(null)
+    if (preloadTimerRef.current) {
+      window.clearTimeout(preloadTimerRef.current)
     }
-    preload.onerror = () => {
-      if (warnedRef.current !== resolvedSrc) {
-        console.warn('Preview image failed to preload:', resolvedSrc)
-        warnedRef.current = resolvedSrc
+    preloadTimerRef.current = window.setTimeout(() => {
+      const preload = new Image()
+      preload.onload = () => {
+        setDisplayedSrc(resolvedSrc)
+        setFallbackDataUrl(null)
       }
-      if (!isLocalPath(imageSrc)) {
-        return
+      preload.onerror = () => {
+        if (warnedRef.current !== resolvedSrc) {
+          console.warn('Preview image failed to preload:', resolvedSrc)
+          warnedRef.current = resolvedSrc
+        }
+        if (!isLocalPath(imageSrc)) {
+          return
+        }
+        invoke<string>('read_image_data_url', { path: imageSrc })
+          .then((dataUrl) => {
+            setFallbackDataUrl(dataUrl)
+            setDisplayedSrc(dataUrl)
+          })
+          .catch((error) => {
+            console.warn('Preview image data url failed:', error)
+          })
       }
-      invoke<string>('read_image_data_url', { path: imageSrc })
-        .then((dataUrl) => {
-          setFallbackDataUrl(dataUrl)
-          setDisplayedSrc(dataUrl)
-        })
-        .catch((error) => {
-          console.warn('Preview image data url failed:', error)
-        })
+      preload.src = resolvedSrc
+    }, 120)
+    return () => {
+      if (preloadTimerRef.current) {
+        window.clearTimeout(preloadTimerRef.current)
+      }
     }
-    preload.src = resolvedSrc
   }, [imageSrc, resolvedSrc])
 
   const normalizeRect = (
