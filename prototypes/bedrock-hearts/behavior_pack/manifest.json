@@ -1,0 +1,28 @@
+{
+  "format_version": 2,
+  "header": {
+    "name": "Hearts Probe (Behavior)",
+    "description": "Reports native player attributes for the Hearts feasibility tests.",
+    "uuid": "b585ec4d-eb4a-4de8-b685-09912fd68045",
+    "version": [0, 1, 0],
+    "min_engine_version": [1, 26, 60]
+  },
+  "modules": [
+    {
+      "type": "data",
+      "uuid": "39148b19-9a6f-41b1-819c-1f508afe0836",
+      "version": [0, 1, 0]
+    },
+    {
+      "type": "script",
+      "language": "javascript",
+      "entry": "scripts/main.js",
+      "uuid": "b1b0a19b-4df2-4ede-9348-6636d2981392",
+      "version": [0, 1, 0]
+    }
+  ],
+  "dependencies": [
+    { "uuid": "d28930da-140d-495b-9244-7774e677434c", "version": [0, 1, 0] },
+    { "module_name": "@minecraft/server", "version": "2.11.0" }
+  ]
+}

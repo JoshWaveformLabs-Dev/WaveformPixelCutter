@@ -1,0 +1,17 @@
+{
+  "name": "bedrock-hearts-probe",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "compile": "tsc",
+    "test": "npm run compile && node --test",
+    "build": "npm run compile && python3 tools/package_addon.py",
+    "validate": "npm run check && npm test && python3 tools/package_addon.py --check"
+  },
+  "devDependencies": {
+    "@minecraft/server": "2.11.0",
+    "typescript": "5.9.3"
+  }
+}

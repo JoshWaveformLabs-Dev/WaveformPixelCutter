@@ -1,0 +1,9 @@
+{
+  "resource_pack_name": "waveform_hearts_probe",
+  "texture_name": "atlas.items",
+  "texture_data": {
+    "waveform_hearts_probe": {
+      "textures": "textures/items/hearts_probe"
+    }
+  }
+}
