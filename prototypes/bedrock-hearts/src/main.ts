@@ -1,3 +1,5 @@
+import "./lives-bedrock.js"
+
 import {
     CommandPermissionLevel,
     CustomCommandParamType,

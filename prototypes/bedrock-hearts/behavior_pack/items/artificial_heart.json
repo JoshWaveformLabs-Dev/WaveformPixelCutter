@@ -1,0 +1,23 @@
+{
+  "format_version": "1.26.60",
+  "minecraft:item": {
+    "description": {
+      "identifier": "waveform:artificial_heart",
+      "menu_category": {
+        "category": "items"
+      }
+    },
+    "components": {
+      "minecraft:display_name": {
+        "value": "Artificial Heart"
+      },
+      "minecraft:icon": {
+        "textures": {
+          "default": "waveform_artificial_heart"
+        }
+      },
+      "minecraft:max_stack_size": 16,
+      "waveform:recover_capacity": {}
+    }
+  }
+}

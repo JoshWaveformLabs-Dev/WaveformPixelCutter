@@ -1,12 +1,12 @@
 {
   "name": "bedrock-hearts-probe",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
     "check": "tsc --noEmit",
     "compile": "tsc",
-    "test": "npm run compile && node --test",
+    "test": "npm run compile && node --test \"test/*.test.js\"",
     "build": "npm run compile && python3 tools/package_addon.py",
     "validate": "npm run check && npm test && python3 tools/package_addon.py --check"
   },

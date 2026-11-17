@@ -8,13 +8,22 @@ import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT = ROOT / "dist/hearts-probe.mcaddon"
+ARTIFACT = ROOT / "dist/hearts-and-lives-dev.mcaddon"
 ENGINE = [1, 26, 60]
 SERVER = "2.11.0"
-ITEM = "items/hearts_probe.json"
 ATLAS = "textures/item_texture.json"
-ICON = "textures/items/hearts_probe.png"
 ENTRY = "scripts/main.js"
+BP = "hearts_and_lives_bp.mcpack"
+RP = "hearts_and_lives_rp.mcpack"
+ITEMS = {
+    "hearts_probe": ("Hearts Probe", "waveform:report_attributes", ENTRY, 1),
+    "artificial_heart": ("Artificial Heart", "waveform:recover_capacity", "scripts/lives-bedrock.js", 16),
+    "half_artificial_heart": ("Half Artificial Heart", "waveform:recover_capacity", "scripts/lives-bedrock.js", 16),
+}
+RECIPES = {
+    "artificial_heart": ["DND", "DHD", "DND"],
+    "half_artificial_heart": ["DN", "DH", "D "],
+}
 
 
 def require(condition, message):
@@ -31,11 +40,15 @@ def source_files(directory, expected):
 
 
 def collect_packs():
-    behavior = source_files("behavior_pack", ["manifest.json", ITEM])
-    resources = source_files("resource_pack", ["manifest.json", ATLAS, ICON])
+    behavior = source_files("behavior_pack", ["manifest.json",
+                            *(f"items/{name}.json" for name in ITEMS),
+                            *(f"recipes/{name}.json" for name in RECIPES)])
+    resources = source_files("resource_pack", ["manifest.json", ATLAS,
+                             *(f"textures/items/{name}.png" for name in ITEMS)])
     behavior.update({f"scripts/{name}": data for name, data in
-                     source_files(".build/scripts", ["main.js", "diagnostics.js"]).items()})
-    return {"hearts_probe_bp.mcpack": behavior, "hearts_probe_rp.mcpack": resources}
+                     source_files(".build/scripts", ["main.js", "diagnostics.js", "lives-bedrock.js",
+                                  "lives-state.js", "lives-store.js", "recovery.js"]).items()})
+    return {BP: behavior, RP: resources}
 
 
 def validate_metadata(behavior, resources):
@@ -78,21 +91,47 @@ def validate_metadata(behavior, resources):
             lock["packages"]["node_modules/@minecraft/server"]["version"] == SERVER,
             "Installed declarations must match the stable script dependency")
 
-    item = json.loads(behavior[ITEM])
+    atlas = json.loads(resources[ATLAS])
+    require(atlas["texture_name"] == "atlas.items", "Wrong texture atlas")
+    for name in ITEMS:
+        validate_item(name, behavior, resources, atlas["texture_data"])
+    for name, pattern in RECIPES.items():
+        validate_recipe(name, pattern, behavior)
+
+
+def validate_item(name, behavior, resources, textures):
+    label, component, script, stack_size = ITEMS[name]
+    item = json.loads(behavior[f"items/{name}.json"])
     require(item["format_version"] == ".".join(map(str, ENGINE)), "Wrong item format version")
     definition = item["minecraft:item"]
-    require(definition["description"]["identifier"] == "waveform:hearts_probe", "Wrong item ID")
+    require(definition["description"]["identifier"] == f"waveform:{name}", "Wrong item ID")
     components = definition["components"]
-    require(components["minecraft:display_name"]["value"] == "Hearts Probe", "Wrong display name")
-    require(components["waveform:report_attributes"] == {} and
-            b'"waveform:report_attributes"' in behavior[ENTRY], "Missing item component binding")
+    require(components["minecraft:display_name"]["value"] == label, "Wrong display name")
+    require(components["minecraft:max_stack_size"] == stack_size, "Wrong max stack size")
+    require(components[component] == {} and f'"{component}"'.encode() in behavior[script],
+            "Missing item component binding")
+    require("minecraft:food" not in components, "Script must control item consumption")
     icon_key = components["minecraft:icon"]["textures"]["default"]
-    atlas = json.loads(resources[ATLAS])
-    require(atlas["texture_name"] == "atlas.items" and
-            atlas["texture_data"][icon_key]["textures"] + ".png" == ICON, "Broken item texture link")
-    png = resources[ICON]
+    icon = f"textures/items/{name}"
+    require(textures[icon_key]["textures"] == icon, "Broken item texture link")
+    png = resources[f"{icon}.png"]
     require(png.startswith(b"\x89PNG\r\n\x1a\n") and png[12:16] == b"IHDR" and
             struct.unpack(">II", png[16:24]) == (16, 16), "Expected a 16x16 PNG")
+
+
+def validate_recipe(name, pattern, behavior):
+    recipe = json.loads(behavior[f"recipes/{name}.json"])
+    require(recipe["format_version"] == "1.21.20", "Wrong recipe format version")
+    shaped = recipe["minecraft:recipe_shaped"]
+    require(shaped["description"]["identifier"] == f"waveform:{name}", "Wrong recipe ID")
+    require(shaped["tags"] == ["crafting_table"] and shaped["pattern"] == pattern,
+            "Wrong crafting station or recipe pattern")
+    require(shaped["key"] == {"D": {"item": "minecraft:diamond"},
+                              "N": {"item": "minecraft:netherite_ingot"},
+                              "H": {"item": "minecraft:heart_of_the_sea"}},
+            "Wrong recipe ingredients")
+    require(shaped["unlock"] == [{"item": "minecraft:diamond"}], "Wrong recipe unlock")
+    require(shaped["result"] == {"item": f"waveform:{name}", "count": 1}, "Wrong recipe output")
 
 
 def make_zip(files):
@@ -118,7 +157,7 @@ def main():
     parser.add_argument("--check", action="store_true", help="Verify the existing artifact")
     args = parser.parse_args()
     packs = collect_packs()
-    validate_metadata(packs["hearts_probe_bp.mcpack"], packs["hearts_probe_rp.mcpack"])
+    validate_metadata(packs[BP], packs[RP])
 
     if not args.check:
         ARTIFACT.parent.mkdir(exist_ok=True)
@@ -127,7 +166,7 @@ def main():
     packaged = read_zip(ARTIFACT.read_bytes(), packs)
     for name, files in packs.items():
         require(read_zip(packaged[name], files) == files, f"Stale or invalid files in {name}")
-    print(f"Validated pack JSON, UUIDs, stable API, texture links and {ARTIFACT.relative_to(ROOT)}")
+    print(f"Validated pack JSON, UUIDs, stable API, textures, recipes and {ARTIFACT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

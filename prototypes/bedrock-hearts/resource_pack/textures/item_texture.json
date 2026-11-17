@@ -4,6 +4,12 @@
   "texture_data": {
     "waveform_hearts_probe": {
       "textures": "textures/items/hearts_probe"
+    },
+    "waveform_artificial_heart": {
+      "textures": "textures/items/artificial_heart"
+    },
+    "waveform_half_artificial_heart": {
+      "textures": "textures/items/half_artificial_heart"
     }
   }
 }
