@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "strict": true,
+    "newLine": "lf",
+    "noEmitOnError": true,
+    "rootDir": "src",
+    "outDir": ".build/scripts"
+  },
+  "include": ["src/**/*.ts"]
+}

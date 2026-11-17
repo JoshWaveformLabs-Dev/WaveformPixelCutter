@@ -1,0 +1,15 @@
+{
+  "name": "bedrock-native-caps",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "compile": "tsc",
+    "build": "npm run compile && python3 tools/package_addons.py",
+    "validate": "npm run compile && node --test test/*.test.js && python3 tools/package_addons.py --check"
+  },
+  "devDependencies": {
+    "@minecraft/server": "2.11.0",
+    "typescript": "5.9.3"
+  }
+}
