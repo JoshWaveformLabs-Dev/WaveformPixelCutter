@@ -1,8 +1,5 @@
-# WaveformOS Pixel Cutter
+# Minecraft Bedrock Survival
 
-Electron-based utility for previewing and exporting cropped iPod-style screen images.
+This repository is being repurposed for a Minecraft Bedrock survival add-on project.
 
-## Development
-
-- Install dependencies: `npm install`
-- Run app: `npm start`
+The previous Pixel Cutter application was retired. Project design and feasibility documentation will be added here before gameplay development begins.
