@@ -30,6 +30,8 @@ const RESET_COMMAND = "waveform:reset_lives"
 const DEATHS = new TickGate()
 const USES = new TickGate()
 const pendingUses = new Map<string, symbol>()
+type LifeEvent = "spawn" | "death"
+const pendingLifeEvents = new Map<string, LifeEvent[]>()
 
 const store: LifeStore = {
     read: (id) => world.getDynamicProperty(`waveform:hearts_lives.${id}`),
@@ -75,13 +77,51 @@ function balance(state: LifeState): string {
     }
 }
 
-function reconcilePlayer(player: Player, event: string): void {
+function queueLifeEvent(id: string, event: LifeEvent): LifeEvent[] {
+    const events = pendingLifeEvents.get(id) ?? []
+    if (events.at(-1) !== event) events.push(event)
+    pendingLifeEvents.set(id, events)
+    return events
+}
+
+function enforceElimination(player: Player | undefined, state: LifeState): void {
+    if (player && isEliminated(state) && player.getGameMode() !== GameMode.Spectator) {
+        player.setGameMode(GameMode.Spectator)
+    }
+}
+
+// Keep unconfirmed boundaries in order. Both operations are idempotent on
+// readback, including a setter that committed before throwing. All other
+// progression writes flush these boundaries first.
+function flushLifeEvents(id: string, player?: Player): LifeState | undefined {
+    const events = pendingLifeEvents.get(id)
+    let state: LifeState | undefined
+    while (events?.length) {
+        const event = events[0]
+        state = event === "death" ? recordDeath(store, id) :
+            reconcileSpawn(store, id, true, (saved) => enforceElimination(player, saved))
+        events.shift()
+        if (event === "death" && state) log("death", id, { state })
+    }
+    pendingLifeEvents.delete(id)
+    return state
+}
+
+function reconcilePlayer(player: Player, event: string, initialSpawn?: boolean): void {
+    // A respawn is a new life even if its native health handle is not readable
+    // yet. A world-load roster can also contain someone on the death screen.
+    let queued = initialSpawn === false
+    if (queued) queueLifeEvent(player.id, "spawn")
     reconcileNativeHealth(player, event, () => {
-        const state = reconcileSpawn(store, player.id, true, (saved) => {
-            if (isEliminated(saved) && player.getGameMode() !== GameMode.Spectator) {
-                player.setGameMode(GameMode.Spectator)
-            }
-        })
+        if (!queued) {
+            const ready = initialSpawn === undefined ? alive(player) :
+                player.getComponent(EntityComponentTypes.Health)?.currentValue !== 0
+            if (!ready) throw new Error("Waiting for player to respawn")
+            queueLifeEvent(player.id, "spawn")
+            queued = true
+        }
+        const state = flushLifeEvents(player.id, player) ?? decodeState(store.read(player.id))
+        enforceElimination(player, state)
         log(event, player.id, { state })
         player.sendMessage(`${LABEL} ${balance(state)}`)
         return state
@@ -92,6 +132,7 @@ function resetPlayer(player: Player): void {
     if (!alive(player)) {
         throw new Error("Wait until the target has respawned")
     }
+    flushLifeEvents(player.id, player)
     decodeState(store.read(player.id)) // Leave unreadable or newer records intact.
     const state = initialState()
     writeVerified(store, player.id, encodeState(state))
@@ -108,6 +149,7 @@ function recoverAtTable(player: Player, index: number, item: ItemStack, units: R
     if (!inventory?.isValid) {
         return
     }
+    flushLifeEvents(player.id, player)
     const settings = readDifficultySettings()
     const { recoveryCooldownTicks: cooldownTicks } = settings.presets[settings.activePreset]
     const recoveryTick = getRecoveryTick()
@@ -203,12 +245,17 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => guarded("death", () =>
         !DEATHS.enter(deadEntity.id, system.currentTick)) {
         return
     }
-    cancelHealthSync(deadEntity.id)
-    pendingUses.delete(deadEntity.id)
-    const state = recordDeath(store, deadEntity.id)
-    if (state !== undefined) {
-        log("death", deadEntity.id, { state })
+    const id = deadEntity.id
+    cancelHealthSync(id)
+    pendingUses.delete(id)
+    const events = queueLifeEvent(id, "death")
+    function commit(attempt: number): void {
+        if (pendingLifeEvents.get(id) !== events) return
+        if (!guarded(`death save for ${id}`, () => flushLifeEvents(id)) && attempt < 2) {
+            system.runTimeout(() => commit(attempt + 1), attempt === 0 ? 1 : 20)
+        }
     }
+    commit(0)
 }))
 
 world.afterEvents.playerLeave.subscribe(({ playerId }) => {
@@ -216,9 +263,10 @@ world.afterEvents.playerLeave.subscribe(({ playerId }) => {
     cancelHealthSync(playerId)
 })
 
-world.afterEvents.playerSpawn.subscribe(({ player }) => {
+world.afterEvents.playerSpawn.subscribe(({ player, initialSpawn }) => {
     pendingUses.delete(player.id)
-    guarded("spawn", () => reconcilePlayer(player, "spawn"))
+    if (!initialSpawn) DEATHS.forget(player.id)
+    guarded("spawn", () => reconcilePlayer(player, "spawn", initialSpawn))
 })
 
 world.afterEvents.worldLoad.subscribe(() => {

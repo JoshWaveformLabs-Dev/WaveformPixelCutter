@@ -549,3 +549,55 @@ test("unreadable progression blocks cap events and test reset; an invalid hunger
     assert.equal(saved.get(PROGRESSIVE_HUNGER_KEY), "unexpected")
     assert.match(b.messages.at(-1), /unreadable hunger setting/)
 })
+
+test("a confirmed respawn rearms death accounting before native health becomes available", (t) => {
+    const player = new Player("rapid-respawn")
+    rosterSpawn(player)
+    player.health = 0
+    die(player)
+    const get = player.getComponent.bind(player)
+    const missing = t.mock.method(player, "getComponent", (type) => {
+        if (type === mockBedrock.EntityComponentTypes.Health) throw new Error("respawn handle loading")
+        return get(type)
+    })
+    world.afterEvents.playerSpawn.emit({ player, initialSpawn: false })
+    assert.equal(state(player.id).awaitingRespawn, false)
+    // Another real death, even in the same script tick, belongs to the new life.
+    die(player)
+    die(player)
+    assert.equal(state(player.id).lives, 16)
+    missing.mock.restore()
+    player.health = 20
+    world.afterEvents.playerSpawn.emit({ player, initialSpawn: false })
+    assert.equal(player.healthMax, 16)
+})
+
+test("dropped death writes replay in lifecycle order across a second death and disconnect", (t) => {
+    const player = new Player("save-order")
+    rosterSpawn(player)
+    const key = `waveform:hearts_lives.${player.id}`
+    const write = world.setDynamicProperty.bind(world)
+    let writable = false
+    t.mock.method(world, "setDynamicProperty", (name, value) => {
+        if (name !== key || writable) write(name, value)
+    })
+    t.mock.method(console, "warn", () => {})
+    player.health = 0
+    die(player)
+    die(player)
+    player.health = 20
+    world.afterEvents.playerSpawn.emit({ player, initialSpawn: false })
+    system.advance()
+    player.health = 0
+    die(player)
+    world.afterEvents.playerLeave.emit({ playerId: player.id })
+    assert.equal(state(player.id).lives, 20)
+    writable = true
+    for (let i = 0; i < 21; i++) system.advance()
+    assert.equal(state(player.id).lives, 16)
+    assert.equal(state(player.id).awaitingRespawn, true)
+    const returning = new Player(player.id)
+    rosterSpawn(returning)
+    assert.equal(returning.healthMax, 16)
+    assert.equal(state(player.id).awaitingRespawn, false)
+})

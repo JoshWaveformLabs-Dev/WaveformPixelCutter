@@ -54,6 +54,10 @@ export class TickGate {
     private tick: number | undefined
     private seen = new Set<string>()
 
+    forget(playerId: string): void {
+        this.seen.delete(playerId)
+    }
+
     enter(playerId: string, tick: number): boolean {
         if (this.tick !== tick) {
             this.seen.clear()

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict"
 import { registerHooks } from "node:module"
 import { test } from "node:test"
-import { Player, system } from "./support/mock-bedrock.js"
+import { EntityComponentTypes, Player, system } from "./support/mock-bedrock.js"
 import { initialState } from "../.build/scripts/lives-state.js"
 
 const mockServer = new URL("./support/mock-bedrock.js", import.meta.url).href
@@ -98,6 +98,38 @@ test("delayed observation leaves intervening combat damage intact", (t) => {
     assert.equal(player.health, 2)
 })
 
+test("a later entity tick preserves damage received while the group was in flight", (t) => {
+    const log = healthLog(t)
+    const player = new Player("late-refill")
+    player.health = 6
+    const apply = player.triggerEvent.bind(player)
+    t.mock.method(player, "triggerEvent", (name) => system.runTimeout(() => apply(name), 5))
+    sync(player, 18)
+    advance(2)
+    player.health = 4
+    advance(18)
+    assert.deepEqual([player.health, player.healthMax], [4, 18])
+    assert.equal(log.at(-1).event, "native_health_verified")
+})
+
+test("an ignored current HP correction cannot produce a clean verification", (t) => {
+    const log = healthLog(t)
+    const player = new Player("refused-refill")
+    const get = player.getComponent.bind(player)
+    t.mock.method(player, "getComponent", (type) => {
+        const component = get(type)
+        component.setCurrentValue = () => true
+        return component
+    })
+    player.health = 4
+    sync(player, 18)
+    advance(60)
+    assert.deepEqual([player.health, player.healthMax], [18, 18])
+    assert.deepEqual(log.map((entry) => entry.event), ["native_health_unverified"])
+    assert.match(log[0].error, /current HP/i)
+    assert.equal(player.triggered.length, 1)
+})
+
 test("a superseded engine event arriving after the first read is repaired to the newest saved target", (t) => {
     const log = healthLog(t)
     const player = new Player("retarget")
@@ -151,23 +183,31 @@ test("transient component loss and an ignored first request recover without repe
     assert.equal(log.at(-1).effectiveMax, 17)
 })
 
-test("Health Boost defers the base cap until the effect clears and leave cancels pending work", (t) => {
+test("Health Boost retains its modifier while the saved base cap changes and verifies", (t) => {
     const log = healthLog(t)
-    const players = [new Player("boost"), new Player("leave")]
-    for (const player of players) {
-        player.healthMax = 24
-        player.effects.set("health_boost", {})
-        sync(player, 15)
-    }
-    advance(40)
-    cancelHealthSync("leave")
-    for (const player of players) {
-        assert.deepEqual(player.triggered, [])
-        player.effects.clear()
-        player.healthMax = 20
-    }
-    advance(40)
-    assert.equal(players[0].healthMax, 15)
-    assert.equal(players[1].healthMax, 20)
-    assert.equal(log.filter((entry) => entry.event === "native_health_deferred_boost").length, 2)
+    const player = new Player("boost")
+    player.health = 6
+    player.effects.set("health_boost", { amplifier: 0 })
+    sync(player, 15)
+    assert.equal(player.getComponent(EntityComponentTypes.Health).effectiveMax, 19)
+    player.effects.set("health_boost", { amplifier: 1 })
+    advance(20)
+    assert.equal(player.health, 6)
+    assert.equal(log.at(-1).targetMax, 15)
+    assert.equal(log.at(-1).expectedMax, 23)
+    assert.equal(log.at(-1).effectiveMax, 23)
+    player.effects.clear()
+    assert.equal(player.getComponent(EntityComponentTypes.Health).effectiveMax, 15)
+    assert.deepEqual(player.triggered, ["waveform_health:cap_15"])
+})
+
+test("leaving cancels retries even when the old handle is still readable", (t) => {
+    const log = healthLog(t)
+    const player = new Player("leave")
+    const ignored = t.mock.method(player, "triggerEvent", () => {})
+    sync(player, 7)
+    cancelHealthSync(player.id)
+    advance(60)
+    assert.equal(ignored.mock.callCount(), 1)
+    assert.deepEqual(log, [])
 })

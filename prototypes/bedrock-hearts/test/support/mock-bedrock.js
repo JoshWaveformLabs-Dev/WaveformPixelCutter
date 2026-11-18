@@ -86,10 +86,13 @@ export class Player {
             const player = this
             return {
                 get currentValue() { return player.health },
-                get effectiveMax() { return player.healthMax },
+                get effectiveMax() {
+                    const boost = player.effects.get("health_boost")
+                    return player.healthMax + (boost ? 4 * (boost.amplifier + 1) : 0)
+                },
                 effectiveMin: 0,
                 setCurrentValue(value) {
-                    if (value < 0 || value > player.healthMax) return false
+                    if (value < 0 || value > this.effectiveMax) return false
                     player.health = value
                     return true
                 },
