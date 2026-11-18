@@ -13,7 +13,8 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "dist/hearts-and-lives-dev.mcaddon"
 ENGINE = [1, 26, 60]
 SERVER = "2.11.0"
-VERSION = [0, 4, 2]
+UI = "2.3.0"
+VERSION = [0, 5, 0]
 NATIVE_PROBE = ROOT.parent / "bedrock-native-caps"
 PLAYER = "entities/player.json"
 ITEM_ATLAS = "textures/item_texture.json"
@@ -30,14 +31,8 @@ ITEMS = {
     "artificial_heart": ("Artificial Heart", 16),
     "half_artificial_heart": ("Half Artificial Heart", 16),
 }
-HEART_INGREDIENTS = {
-    "D": "minecraft:diamond",
-    "N": "minecraft:netherite_ingot",
-    "H": "minecraft:heart_of_the_sea",
-}
+INGREDIENT_ICONS = ("diamond", "netherite_ingot", "heartofthesea_closed")
 RECIPES = {
-    "artificial_heart": (["DND", "DHD", "DND"], HEART_INGREDIENTS),
-    "half_artificial_heart": (["DN", "DH", "D "], HEART_INGREDIENTS),
     "reanimation_table": (["ORO", "GCG", "ODO"], {
         "O": "minecraft:obsidian",
         "R": "minecraft:redstone",
@@ -81,14 +76,16 @@ def collect_packs():
                             *(f"recipes/{name}.json" for name in RECIPES)])
     resources = source_files("resource_pack", ["manifest.json", "blocks.json", ITEM_ATLAS, TERRAIN_ATLAS,
                              *(f"{table_texture(face)}.png" for face in TABLE_FACES.values()),
+                             *(f"textures/ui/waveform/{name}.png" for name in INGREDIENT_ICONS),
                              *(f"textures/items/{name}.png" for name in ITEMS)])
     behavior.update({f"scripts/{name}": data for name, data in
                      source_files(".build/scripts", ["main.js", "diagnostics.js", "lives-bedrock.js",
                                   "lives-state.js", "lives-store.js", "recovery.js",
                                   "difficulty-bedrock.js", "difficulty-settings.js", "recovery-clock.js",
-                                  "native-health.js"]).items()})
+                                  "native-health.js", "recovery-materials.js", "recovery-form.js"]).items()})
     behavior[PLAYER] = native_player()
     behavior["LICENSE.txt"] = (NATIVE_PROBE / "vendor/LICENSE.md").read_bytes().replace(b"\r\n", b"\n")
+    resources["LICENSE.txt"] = behavior["LICENSE.txt"]
     return {BP: behavior, RP: resources}
 
 
@@ -126,6 +123,7 @@ def validate_metadata(behavior, resources):
     require(behavior_manifest["dependencies"] == [
         {"uuid": resource_header["uuid"], "version": resource_header["version"]},
         {"module_name": "@minecraft/server", "version": SERVER},
+        {"module_name": "@minecraft/server-ui", "version": UI},
     ], "Wrong pack linkage or stable script dependency")
 
     package = json.loads((ROOT / "package.json").read_bytes())
@@ -136,6 +134,10 @@ def validate_metadata(behavior, resources):
             lock["packages"]["node_modules/@minecraft/server"]["version"] == SERVER,
             "Installed declarations must match the stable script dependency")
 
+    require(package["devDependencies"]["@minecraft/server-ui"] == UI and
+            lock["packages"]["node_modules/@minecraft/server-ui"]["version"] == UI, "Wrong stable UI declarations")
+    for icon in INGREDIENT_ICONS:
+        validate_png(resources[f"textures/ui/waveform/{icon}.png"], icon)
     atlas = json.loads(resources[ITEM_ATLAS])
     require(atlas["texture_name"] == "atlas.items", "Wrong texture atlas")
     for name in ITEMS:

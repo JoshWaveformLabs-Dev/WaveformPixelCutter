@@ -1,0 +1,68 @@
+import type { Container, ItemStack } from "@minecraft/server"
+import type { DifficultyPreset } from "./difficulty-settings.js"
+import type { RecoveryUnits } from "./lives-state.js"
+
+export interface Ingredient {
+    id: string
+    label: string
+    icon: string
+    required: number
+}
+
+type Recipe = readonly Ingredient[]
+type Prices = Readonly<Record<RecoveryUnits, Recipe>>
+
+const diamond = { id: "minecraft:diamond", label: "Diamonds", icon: "diamond" }
+const netherite = { id: "minecraft:netherite_ingot", label: "Netherite Ingots", icon: "netherite_ingot" }
+const sea = { id: "minecraft:heart_of_the_sea", label: "Heart of the Sea", icon: "heartofthesea_closed" }
+const normal: Prices = {
+    2: [{ ...diamond, required: 6 }, { ...netherite, required: 2 }, { ...sea, required: 1 }],
+    1: [{ ...diamond, required: 3 }, { ...netherite, required: 1 }, { ...sea, required: 1 }],
+}
+
+// Only Normal is approved. Replace each provisional entry when its costs are approved.
+export const recoveryPrices: Readonly<Record<DifficultyPreset, Prices>> = {
+    easy: normal, normal, hard: normal, extreme: normal,
+}
+
+type Inventory = Pick<Container, "size" | "getItem" | "setItem">
+
+export interface DebitSlot {
+    read(): ItemStack | undefined
+    write(stack: ItemStack | undefined): void
+    before: ItemStack
+    after: ItemStack | undefined
+}
+
+export function debitSlot(before: ItemStack, quantity: number, read: DebitSlot["read"], write: DebitSlot["write"]): DebitSlot {
+    const after = quantity === before.amount ? undefined : before.clone()
+    if (after) after.amount -= quantity
+    return { before, after, read, write }
+}
+
+export function inventoryCounts(inventory: Inventory): Map<string, number> {
+    const counts = new Map<string, number>()
+    for (let index = 0; index < inventory.size; index++) {
+        const stack = inventory.getItem(index)
+        if (stack) counts.set(stack.typeId, (counts.get(stack.typeId) ?? 0) + stack.amount)
+    }
+    return counts
+}
+
+export function inspectMaterials(inventory: Inventory, recipe: Recipe) {
+    const rows = recipe.map(ingredient => ({ ...ingredient, owned: 0 }))
+    const byId = new Map(rows.map(row => [row.id, row]))
+    const slots: DebitSlot[] = []
+    for (let index = 0; index < inventory.size; index++) {
+        const stack = inventory.getItem(index)
+        if (!stack) continue
+        const row = byId.get(stack.typeId)
+        if (!row) continue
+        const take = Math.min(stack.amount, row.required - row.owned)
+        row.owned += stack.amount
+        if (take > 0) {
+            slots.push(debitSlot(stack, take, () => inventory.getItem(index), value => inventory.setItem(index, value)))
+        }
+    }
+    return { rows, slots, affordable: rows.every(row => row.owned >= row.required) }
+}
