@@ -18,15 +18,17 @@ export const system = {
     currentTick: 0,
     beforeEvents: { startup: signal() },
     run(callback) { scheduled.push(callback) },
+    flush() { for (const callback of scheduled.splice(0)) callback() },
     advance() {
         this.currentTick += 1
-        for (const callback of scheduled.splice(0)) callback()
+        this.flush()
     },
 }
 
 export const saved = new Map()
 export const world = {
-    afterEvents: { playerSpawn: signal(), entityDie: signal(), worldLoad: signal() },
+    beforeEvents: { playerInteractWithBlock: signal() },
+    afterEvents: { playerSpawn: signal(), playerLeave: signal(), entityDie: signal(), worldLoad: signal() },
     players: [],
     getAllPlayers() { return this.players },
     getDynamicProperty(key) { return saved.get(key) },
@@ -42,6 +44,7 @@ export class Player {
     actionBar = []
     onScreenDisplay = { setActionBar: (message) => this.actionBar.push(message) }
     selectedSlotIndex = 0
+    dimension = { id: "minecraft:overworld" }
     inventory = {
         isValid: true,
         stacks: new Map(),
@@ -65,11 +68,12 @@ export class Player {
 }
 
 export class Stack {
-    constructor(typeId, amount) {
+    constructor(typeId, amount, metadata = "") {
         this.typeId = typeId
         this.amount = amount
+        this.metadata = metadata
     }
 
-    clone() { return new Stack(this.typeId, this.amount) }
-    isStackableWith(other) { return this.typeId === other.typeId }
+    clone() { return new Stack(this.typeId, this.amount, this.metadata) }
+    isStackableWith(other) { return this.typeId === other.typeId && this.metadata === other.metadata }
 }

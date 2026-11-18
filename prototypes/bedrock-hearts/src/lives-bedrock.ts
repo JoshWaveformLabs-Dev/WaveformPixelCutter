@@ -9,7 +9,7 @@ import {
     system,
     world,
 } from "@minecraft/server"
-import type { Entity } from "@minecraft/server"
+import type { Entity, ItemStack } from "@minecraft/server"
 import { encodeState, initialState, isEliminated } from "./lives-state.js"
 import type { LifeState, RecoveryUnits } from "./lives-state.js"
 import { reconcileSpawn, recordDeath, TickGate } from "./lives-store.js"
@@ -17,10 +17,15 @@ import type { LifeStore } from "./lives-store.js"
 import { recover } from "./recovery.js"
 
 const LABEL = "[Hearts & Lives]"
-const RECOVERY_COMPONENT = "waveform:recover_capacity"
+const REANIMATION_TABLE = "waveform:reanimation_table"
+const HEART_UNITS: ReadonlyMap<string, RecoveryUnits> = new Map([
+    ["waveform:artificial_heart", 2],
+    ["waveform:half_artificial_heart", 1],
+])
 const RESET_COMMAND = "waveform:reset_lives"
 const DEATHS = new TickGate()
 const USES = new TickGate()
+const pendingUses = new Map<string, symbol>()
 
 const store: LifeStore = {
     read: (id) => world.getDynamicProperty(`waveform:hearts_lives.${id}`),
@@ -89,52 +94,70 @@ function resetPlayer(player: Player): void {
     player.sendMessage(`${LABEL} Host test reset | ${balance(state)}`)
 }
 
-system.beforeEvents.startup.subscribe(({ itemComponentRegistry, customCommandRegistry }) => {
-    guarded("recovery registration", () => itemComponentRegistry.registerCustomComponent(RECOVERY_COMPONENT, {
-        onUse({ source: player, itemStack }) {
-            const ok = guarded("recovery", () => {
-                let units: RecoveryUnits
-                switch (itemStack?.typeId) {
-                    case "waveform:artificial_heart":
-                        units = 2
-                        break
-                    case "waveform:half_artificial_heart":
-                        units = 1
-                        break
-                    default:
-                        return
-                }
-                if (!alive(player) || player.getGameMode() === GameMode.Spectator ||
-                    !USES.enter(player.id, system.currentTick)) {
-                    return
-                }
-                const index = player.selectedSlotIndex
-                const inventory = player.getComponent(EntityComponentTypes.Inventory)?.container
-                if (!inventory?.isValid) {
-                    return
-                }
-                const result = recover(store, player.id, {
-                    isSelected: () => player.selectedSlotIndex === index,
-                    read: () => inventory.getItem(index),
-                    write: (stack) => inventory.setItem(index, stack),
-                }, itemStack, units)
-                if ("denial" in result) {
-                    if (result.denial === "over_cap") {
-                        player.sendMessage(`${LABEL} This heart would exceed the starting capacity.`)
-                    } else if (result.denial === "stale_item") {
-                        player.sendMessage(`${LABEL} Hold the matching stackable heart and try again.`)
-                    }
-                    return
-                }
-                log("recovery", player.id, result.state)
-                player.sendMessage(`${LABEL} Restored ${units / 2} | ${balance(result.state)}`)
-            })
-            if (!ok) {
-                guarded("recovery feedback", () => player.sendMessage(`${LABEL} Recovery error. Check the host log before retrying.`))
-            }
-        },
-    }))
+function recoverAtTable(player: Player, index: number, item: ItemStack, units: RecoveryUnits): void {
+    const inventory = player.getComponent(EntityComponentTypes.Inventory)?.container
+    if (!inventory?.isValid) {
+        return
+    }
+    const result = recover(store, player.id, {
+        isSelected: () => player.selectedSlotIndex === index,
+        read: () => inventory.getItem(index),
+        write: (stack) => inventory.setItem(index, stack),
+    }, item, units)
+    if ("denial" in result) {
+        if (result.denial === "over_cap") {
+            player.sendMessage(`${LABEL} This heart would exceed the starting capacity.`)
+        } else if (result.denial === "stale_item") {
+            player.sendMessage(`${LABEL} Hold the matching stackable heart and try again.`)
+        }
+        return
+    }
+    log("recovery", player.id, result.state)
+    player.sendMessage(`${LABEL} Restored ${units / 2} | ${balance(result.state)}`)
+}
 
+world.beforeEvents.playerInteractWithBlock.subscribe((event) => guarded("table interaction", () => {
+    const { block, itemStack, player } = event
+    if (event.cancel || !itemStack || block.typeId !== REANIMATION_TABLE) {
+        return
+    }
+    const units = HEART_UNITS.get(itemStack.typeId)
+    if (units === undefined) {
+        return
+    }
+
+    event.cancel = true
+    const id = player.id
+    if (!event.isFirstEvent || pendingUses.has(id) || !USES.enter(id, system.currentTick)) {
+        return
+    }
+
+    const token = Symbol()
+    const index = player.selectedSlotIndex
+    const item = itemStack.clone()
+    const { dimension, location } = block
+    // The before event is read-only apart from cancellation. Recheck the request in writable execution.
+    system.run(() => {
+        if (pendingUses.get(id) !== token) {
+            return
+        }
+        pendingUses.delete(id)
+        const ok = guarded("recovery", () => {
+            if (!alive(player) || player.getGameMode() === GameMode.Spectator ||
+                player.dimension.id !== dimension.id ||
+                dimension.getBlock(location)?.typeId !== REANIMATION_TABLE) {
+                return
+            }
+            recoverAtTable(player, index, item, units)
+        })
+        if (!ok && player.isValid) {
+            guarded("recovery feedback", () => player.sendMessage(`${LABEL} Recovery error. Check the host log before retrying.`))
+        }
+    })
+    pendingUses.set(id, token)
+}))
+
+system.beforeEvents.startup.subscribe(({ customCommandRegistry }) => {
     guarded("reset registration", () => customCommandRegistry.registerCommand({
         name: RESET_COMMAND,
         description: "Reset one online player's Hearts & Lives state in a test world",
@@ -169,7 +192,10 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => guarded("death", () =>
     }
 }))
 
+world.afterEvents.playerLeave.subscribe(({ playerId }) => pendingUses.delete(playerId))
+
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
+    pendingUses.delete(player.id)
     let reconciled = false
     guarded("spawn", () => { reconciled = reconcilePlayer(player, "spawn") })
     if (!reconciled) {

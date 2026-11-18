@@ -16,8 +16,7 @@
           "default": "waveform_artificial_heart"
         }
       },
-      "minecraft:max_stack_size": 16,
-      "waveform:recover_capacity": {}
+      "minecraft:max_stack_size": 16
     }
   }
 }

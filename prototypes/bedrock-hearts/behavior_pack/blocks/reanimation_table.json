@@ -1,0 +1,29 @@
+{
+  "format_version": "1.26.60",
+  "minecraft:block": {
+    "description": {
+      "identifier": "waveform:reanimation_table"
+    },
+    "components": {
+      "minecraft:display_name": "Reanimation Table",
+      "minecraft:geometry": "minecraft:geometry.full_block",
+      "minecraft:material_instances": {
+        "*": {
+          "texture": "waveform_reanimation_table_side",
+          "render_method": "opaque"
+        },
+        "up": {
+          "texture": "waveform_reanimation_table_top",
+          "render_method": "opaque"
+        },
+        "down": {
+          "texture": "waveform_reanimation_table_bottom",
+          "render_method": "opaque"
+        }
+      },
+      "minecraft:destructible_by_mining": {
+        "seconds_to_destroy": 2
+      }
+    }
+  }
+}

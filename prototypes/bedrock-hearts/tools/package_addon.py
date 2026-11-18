@@ -11,14 +11,18 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "dist/hearts-and-lives-dev.mcaddon"
 ENGINE = [1, 26, 60]
 SERVER = "2.11.0"
-ATLAS = "textures/item_texture.json"
+ITEM_ATLAS = "textures/item_texture.json"
+TERRAIN_ATLAS = "textures/terrain_texture.json"
 ENTRY = "scripts/main.js"
 BP = "hearts_and_lives_bp.mcpack"
 RP = "hearts_and_lives_rp.mcpack"
+TABLE_ID = "waveform:reanimation_table"
+TABLE_BLOCK = "blocks/reanimation_table.json"
+TABLE_FACES = {"*": "side", "up": "top", "down": "bottom"}
 ITEMS = {
-    "hearts_probe": ("Hearts Probe", "waveform:report_attributes", ENTRY, 1),
-    "artificial_heart": ("Artificial Heart", "waveform:recover_capacity", "scripts/lives-bedrock.js", 16),
-    "half_artificial_heart": ("Half Artificial Heart", "waveform:recover_capacity", "scripts/lives-bedrock.js", 16),
+    "hearts_probe": ("Hearts Probe", 1),
+    "artificial_heart": ("Artificial Heart", 16),
+    "half_artificial_heart": ("Half Artificial Heart", 16),
 }
 RECIPES = {
     "artificial_heart": ["DND", "DHD", "DND"],
@@ -40,10 +44,11 @@ def source_files(directory, expected):
 
 
 def collect_packs():
-    behavior = source_files("behavior_pack", ["manifest.json",
+    behavior = source_files("behavior_pack", ["manifest.json", TABLE_BLOCK,
                             *(f"items/{name}.json" for name in ITEMS),
                             *(f"recipes/{name}.json" for name in RECIPES)])
-    resources = source_files("resource_pack", ["manifest.json", ATLAS,
+    resources = source_files("resource_pack", ["manifest.json", "blocks.json", ITEM_ATLAS, TERRAIN_ATLAS,
+                             *(f"{table_texture(face)}.png" for face in TABLE_FACES.values()),
                              *(f"textures/items/{name}.png" for name in ITEMS)])
     behavior.update({f"scripts/{name}": data for name, data in
                      source_files(".build/scripts", ["main.js", "diagnostics.js", "lives-bedrock.js",
@@ -91,16 +96,17 @@ def validate_metadata(behavior, resources):
             lock["packages"]["node_modules/@minecraft/server"]["version"] == SERVER,
             "Installed declarations must match the stable script dependency")
 
-    atlas = json.loads(resources[ATLAS])
+    atlas = json.loads(resources[ITEM_ATLAS])
     require(atlas["texture_name"] == "atlas.items", "Wrong texture atlas")
     for name in ITEMS:
         validate_item(name, behavior, resources, atlas["texture_data"])
     for name, pattern in RECIPES.items():
         validate_recipe(name, pattern, behavior)
+    validate_table(behavior, resources)
 
 
 def validate_item(name, behavior, resources, textures):
-    label, component, script, stack_size = ITEMS[name]
+    label, stack_size = ITEMS[name]
     item = json.loads(behavior[f"items/{name}.json"])
     require(item["format_version"] == ".".join(map(str, ENGINE)), "Wrong item format version")
     definition = item["minecraft:item"]
@@ -108,15 +114,51 @@ def validate_item(name, behavior, resources, textures):
     components = definition["components"]
     require(components["minecraft:display_name"]["value"] == label, "Wrong display name")
     require(components["minecraft:max_stack_size"] == stack_size, "Wrong max stack size")
-    require(components[component] == {} and f'"{component}"'.encode() in behavior[script],
-            "Missing item component binding")
-    require("minecraft:food" not in components, "Script must control item consumption")
+    expected_components = {"minecraft:display_name", "minecraft:icon", "minecraft:max_stack_size"}
+    if name == "hearts_probe":
+        probe = "waveform:report_attributes"
+        expected_components.add(probe)
+        require(components[probe] == {} and f'"{probe}"'.encode() in behavior[ENTRY],
+                "Missing Hearts Probe binding")
+    require(components.keys() == expected_components, f"Unexpected {name} behavior")
     icon_key = components["minecraft:icon"]["textures"]["default"]
     icon = f"textures/items/{name}"
     require(textures[icon_key]["textures"] == icon, "Broken item texture link")
-    png = resources[f"{icon}.png"]
+    validate_png(resources[f"{icon}.png"], icon)
+
+
+def validate_png(png, name):
     require(png.startswith(b"\x89PNG\r\n\x1a\n") and png[12:16] == b"IHDR" and
-            struct.unpack(">II", png[16:24]) == (16, 16), "Expected a 16x16 PNG")
+            struct.unpack(">II", png[16:24]) == (16, 16), f"Expected a 16x16 PNG for {name}")
+
+
+def table_texture(face):
+    return f"textures/blocks/reanimation_table_{face}"
+
+
+def validate_table(behavior, resources):
+    block = json.loads(behavior[TABLE_BLOCK])
+    require(block["format_version"] == ".".join(map(str, ENGINE)), "Wrong block format version")
+    definition = block["minecraft:block"]
+    require(definition["description"] == {"identifier": TABLE_ID},
+            "Wrong table ID or unexpected table acquisition path")
+    components = definition["components"]
+    require(components["minecraft:display_name"] == "Reanimation Table", "Wrong table display name")
+    require(components["minecraft:geometry"] == "minecraft:geometry.full_block", "Wrong table geometry")
+    materials = components["minecraft:material_instances"]
+    atlas = json.loads(resources[TERRAIN_ATLAS])
+    require(atlas["texture_name"] == "atlas.terrain", "Wrong terrain atlas")
+    textures = atlas["texture_data"]
+    require(materials.keys() == TABLE_FACES.keys(), "Wrong table face assignments")
+    for face, suffix in TABLE_FACES.items():
+        key = f"waveform_reanimation_table_{suffix}"
+        path = table_texture(suffix)
+        require(materials[face] == {"texture": key, "render_method": "opaque"},
+                f"Wrong table material for {face}")
+        require(textures[key]["textures"] == path, f"Broken table texture link for {face}")
+        validate_png(resources[f"{path}.png"], path)
+    require(json.loads(resources["blocks.json"])[TABLE_ID]["sound"] == "metal",
+            "Missing table sound binding")
 
 
 def validate_recipe(name, pattern, behavior):
@@ -166,7 +208,8 @@ def main():
     packaged = read_zip(ARTIFACT.read_bytes(), packs)
     for name, files in packs.items():
         require(read_zip(packaged[name], files) == files, f"Stale or invalid files in {name}")
-    print(f"Validated pack JSON, UUIDs, stable API, textures, recipes and {ARTIFACT.relative_to(ROOT)}")
+    print(f"Validated pack JSON, UUIDs, stable API, recipes, Reanimation Table, textures and "
+          f"{ARTIFACT.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

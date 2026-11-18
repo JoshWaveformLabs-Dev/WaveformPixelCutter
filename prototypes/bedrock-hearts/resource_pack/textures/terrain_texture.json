@@ -1,0 +1,17 @@
+{
+  "resource_pack_name": "waveform_hearts_and_lives",
+  "texture_name": "atlas.terrain",
+  "padding": 8,
+  "num_mip_levels": 4,
+  "texture_data": {
+    "waveform_reanimation_table_top": {
+      "textures": "textures/blocks/reanimation_table_top"
+    },
+    "waveform_reanimation_table_side": {
+      "textures": "textures/blocks/reanimation_table_side"
+    },
+    "waveform_reanimation_table_bottom": {
+      "textures": "textures/blocks/reanimation_table_bottom"
+    }
+  }
+}

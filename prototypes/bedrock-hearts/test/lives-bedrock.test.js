@@ -29,7 +29,28 @@ const HALF = "waveform:half_artificial_heart"
 const state = (id) => JSON.parse(saved.get(`waveform:hearts_lives.${id}`))
 const rosterSpawn = (player) => world.afterEvents.playerSpawn.emit({ player, initialSpawn: true })
 const die = (player) => world.afterEvents.entityDie.emit({ deadEntity: player })
-const use = (player, itemStack) => components.get("waveform:recover_capacity").onUse({ source: player, itemStack })
+const TABLE = "waveform:reanimation_table"
+const tableAt = (typeId = TABLE) => {
+    const location = { x: 3, y: 70, z: 5 }
+    const block = { typeId, location, dimension: {
+        id: "minecraft:overworld",
+        getBlock: (position) => JSON.stringify(position) === JSON.stringify(location) ? block : undefined,
+    } }
+    return block
+}
+function interact(player, options = {}) {
+    const event = { player, block: tableAt(), itemStack: player.inventory.getItem(player.selectedSlotIndex),
+        isFirstEvent: true, cancel: false, ...options }
+    world.beforeEvents.playerInteractWithBlock.emit(event)
+    return event
+}
+function injured(id, units = 14) {
+    const player = new Player(id)
+    saved.set(`waveform:hearts_lives.${id}`, JSON.stringify({ version: 1, units }))
+    rosterSpawn(player)
+    player.inventory.setItem(0, new Stack(FULL, 3))
+    return player
+}
 
 test("mocked callbacks isolate deaths, deduplicate, and reconcile eliminated reconnects", () => {
     const a = new Player("death-a")
@@ -64,7 +85,8 @@ test("mocked callbacks isolate deaths, deduplicate, and reconcile eliminated rec
     assert.equal(state(a.id).lives, 0)
     const heart = new Stack(FULL, 2)
     rejoined.inventory.setItem(0, heart)
-    use(rejoined, heart)
+    interact(rejoined)
+    system.advance()
     assert.equal(rejoined.inventory.getItem(0).amount, 2)
 })
 
@@ -79,23 +101,134 @@ test("Spectator enforcement precedes a failing reconciliation write", (t) => {
     assert.equal(state(player.id).lives, 0)
 })
 
-test("recovery adapter blocks repeated same-tick use and dispatches the correct heart", () => {
-    const player = new Player("recovery")
-    saved.set(`waveform:hearts_lives.${player.id}`, '{"version":1,"units":14}')
-    rosterSpawn(player)
-    const hearts = new Stack(FULL, 3)
-    player.inventory.setItem(0, hearts)
-    use(player, hearts)
-    use(player, player.inventory.getItem(0))
+test("table defers full and half recovery and debits only the initiating player's selected stack", () => {
+    const a = injured("table-a")
+    const b = injured("table-b")
+    b.selectedSlotIndex = 4
+    b.inventory.setItem(4, new Stack(HALF, 1))
+    const table = tableAt()
+    assert.equal(interact(a, { block: table }).cancel, true)
+    assert.equal(interact(b, { block: table }).cancel, true)
+    assert.equal(state(a.id).lives, 14)
+    assert.equal(a.inventory.getItem(0).amount, 3)
+    assert.equal(b.inventory.getItem(4).amount, 1)
+
+    system.advance()
+    assert.deepEqual([state(a.id).lives, state(a.id).hearts, state(a.id).hunger], [16, 16, 16])
+    assert.equal(a.inventory.getItem(0).amount, 2)
+    assert.deepEqual([state(b.id).lives, state(b.id).hearts, state(b.id).hunger], [15, 15, 15])
+    assert.equal(b.inventory.getItem(0).amount, 3)
+    assert.equal(b.inventory.getItem(4), undefined)
+    assert.equal(components.has("waveform:recover_capacity"), false)
+})
+
+test("ordinary blocks, empty hands, unrelated items and already canceled actions cannot restore capacity", () => {
+    const player = injured("table-only")
+    for (const options of [
+        { block: tableAt("minecraft:crafting_table") },
+        { itemStack: undefined },
+        { itemStack: new Stack("minecraft:stone", 1) },
+        { itemStack: new Stack(TABLE, 1) },
+        { itemStack: new Stack("waveform:hearts_probe", 1) },
+    ]) {
+        assert.equal(interact(player, options).cancel, false)
+    }
+    assert.equal(interact(player, { cancel: true }).cancel, true)
+    system.advance()
+    assert.equal(state(player.id).lives, 14)
+    assert.equal(player.inventory.getItem(0).amount, 3)
+})
+
+test("duplicate same-tick events and held-button repeats never grant additional recovery", (t) => {
+    const player = injured("table-duplicate")
+    const run = t.mock.method(system, "run")
+    interact(player)
+    interact(player)
+    assert.equal(run.mock.callCount(), 1)
+    system.flush()
+    assert.equal(state(player.id).lives, 16)
+
+    // The deferred callback can run in the same tick. A new event can already see the debited stack.
+    interact(player)
+    assert.equal(run.mock.callCount(), 1)
+    system.advance()
+    assert.equal(interact(player, { isFirstEvent: false }).cancel, true)
+    system.advance()
+    interact(player, { isFirstEvent: false })
+    system.advance()
     assert.equal(state(player.id).lives, 16)
     assert.equal(player.inventory.getItem(0).amount, 2)
 
+    interact(player)
     system.advance()
-    const half = new Stack(HALF, 1)
-    player.inventory.setItem(0, half)
-    use(player, half)
-    assert.equal(state(player.id).lives, 17)
-    assert.equal(player.inventory.getItem(0), undefined)
+    assert.equal(state(player.id).lives, 18)
+    assert.equal(player.inventory.getItem(0).amount, 1)
+})
+
+test("table rejects full hearts for a half-unit deficit and rejects recovery at cap", () => {
+    const player = injured("table-over-cap", 19)
+    interact(player)
+    system.advance()
+    assert.equal(state(player.id).lives, 19)
+    assert.equal(player.inventory.getItem(0).amount, 3)
+    assert.match(player.messages.at(-1), /exceed the starting capacity/)
+
+    player.inventory.setItem(0, new Stack(HALF, 2))
+    interact(player)
+    system.advance()
+    assert.equal(state(player.id).lives, 20)
+    interact(player)
+    system.advance()
+    assert.equal(state(player.id).lives, 20)
+    assert.equal(player.inventory.getItem(0).amount, 1)
+})
+
+test("table does not debit or restore when the held slot or exact stack changes before execution", () => {
+    for (const [label, change] of [
+        ["slot", (player) => { player.selectedSlotIndex = 1 }],
+        ["drop", (player) => player.inventory.setItem(0, undefined)],
+        ["count", (player) => player.inventory.setItem(0, new Stack(FULL, 2))],
+        ["metadata", (player) => player.inventory.setItem(0, new Stack(FULL, 3, "renamed"))],
+        ["type", (player) => player.inventory.setItem(0, new Stack(HALF, 3))],
+    ]) {
+        const player = injured(`table-stale-${label}`)
+        interact(player)
+        change(player)
+        const stack = player.inventory.getItem(0)
+        system.advance()
+        assert.equal(state(player.id).lives, 14, label)
+        assert.deepEqual(player.inventory.getItem(0), stack, label)
+    }
+})
+
+test("table requests expire after station removal, dimension change, death, leaving or respawning", () => {
+    for (const [label, invalidate] of [
+        ["broken", (_player, block) => { block.typeId = "minecraft:air" }],
+        ["dimension", (player) => { player.dimension = { id: "minecraft:nether" } }],
+        ["dead", (player) => { player.health = 0 }],
+        ["invalid", (player) => { player.isValid = false }],
+        ["spectator", (player) => { player.mode = GameMode.Spectator }],
+        ["leave", (player) => world.afterEvents.playerLeave.emit({ playerId: player.id })],
+        ["respawn", (player) => world.afterEvents.playerSpawn.emit({ player, initialSpawn: false })],
+    ]) {
+        const player = injured(`table-expired-${label}`)
+        const block = tableAt()
+        interact(player, { block })
+        invalidate(player, block)
+        system.advance()
+        assert.equal(state(player.id).lives, 14, label)
+        assert.equal(player.inventory.getItem(0).amount, 3, label)
+    }
+})
+
+test("table recovery keeps the existing inventory rollback and failure message when saving fails", (t) => {
+    const player = injured("table-save-failure")
+    t.mock.method(world, "setDynamicProperty", () => { throw new Error("injected recovery write failure") })
+    interact(player)
+    system.advance()
+    assert.equal(state(player.id).lives, 14)
+    assert.equal(player.inventory.getItem(0).amount, 3)
+    assert.match(player.messages.at(-1), /Recovery error/)
 })
 
 test("host reset is permission-gated, targeted, deferred, and restores Survival", () => {
