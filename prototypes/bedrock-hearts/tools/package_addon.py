@@ -18,15 +18,28 @@ BP = "hearts_and_lives_bp.mcpack"
 RP = "hearts_and_lives_rp.mcpack"
 TABLE_ID = "waveform:reanimation_table"
 TABLE_BLOCK = "blocks/reanimation_table.json"
+TABLE_LOOT = "loot_tables/blocks/reanimation_table.json"
 TABLE_FACES = {"*": "side", "up": "top", "down": "bottom"}
 ITEMS = {
     "hearts_probe": ("Hearts Probe", 1),
     "artificial_heart": ("Artificial Heart", 16),
     "half_artificial_heart": ("Half Artificial Heart", 16),
 }
+HEART_INGREDIENTS = {
+    "D": "minecraft:diamond",
+    "N": "minecraft:netherite_ingot",
+    "H": "minecraft:heart_of_the_sea",
+}
 RECIPES = {
-    "artificial_heart": ["DND", "DHD", "DND"],
-    "half_artificial_heart": ["DN", "DH", "D "],
+    "artificial_heart": (["DND", "DHD", "DND"], HEART_INGREDIENTS),
+    "half_artificial_heart": (["DN", "DH", "D "], HEART_INGREDIENTS),
+    "reanimation_table": (["ORO", "GCG", "ODO"], {
+        "O": "minecraft:obsidian",
+        "R": "minecraft:redstone",
+        "G": "minecraft:gold_ingot",
+        "C": "minecraft:crafting_table",
+        "D": "minecraft:diamond",
+    }),
 }
 
 
@@ -44,7 +57,7 @@ def source_files(directory, expected):
 
 
 def collect_packs():
-    behavior = source_files("behavior_pack", ["manifest.json", TABLE_BLOCK,
+    behavior = source_files("behavior_pack", ["manifest.json", TABLE_BLOCK, TABLE_LOOT,
                             *(f"items/{name}.json" for name in ITEMS),
                             *(f"recipes/{name}.json" for name in RECIPES)])
     resources = source_files("resource_pack", ["manifest.json", "blocks.json", ITEM_ATLAS, TERRAIN_ATLAS,
@@ -101,8 +114,8 @@ def validate_metadata(behavior, resources):
     require(atlas["texture_name"] == "atlas.items", "Wrong texture atlas")
     for name in ITEMS:
         validate_item(name, behavior, resources, atlas["texture_data"])
-    for name, pattern in RECIPES.items():
-        validate_recipe(name, pattern, behavior)
+    for name, (pattern, ingredients) in RECIPES.items():
+        validate_recipe(name, pattern, ingredients, behavior)
     validate_table(behavior, resources)
 
 
@@ -142,9 +155,13 @@ def validate_table(behavior, resources):
     require(block["format_version"] == ".".join(map(str, ENGINE)), "Wrong block format version")
     definition = block["minecraft:block"]
     require(definition["description"] == {"identifier": TABLE_ID},
-            "Wrong table ID or unexpected table acquisition path")
+            "Wrong table block description")
     components = definition["components"]
     require(components["minecraft:display_name"] == "Reanimation Table", "Wrong table display name")
+    require(components.get("minecraft:loot") == TABLE_LOOT, "Wrong Reanimation Table loot path")
+    drop = json.loads(behavior[TABLE_LOOT])
+    require(drop == {"pools": [{"rolls": 1, "entries": [{"type": "item", "name": TABLE_ID}]}]} and
+            type(drop["pools"][0]["rolls"]) is int, "Reanimation Table must drop exactly one of itself")
     require(components["minecraft:geometry"] == "minecraft:geometry.full_block", "Wrong table geometry")
     materials = components["minecraft:material_instances"]
     atlas = json.loads(resources[TERRAIN_ATLAS])
@@ -162,19 +179,19 @@ def validate_table(behavior, resources):
             "Missing table sound binding")
 
 
-def validate_recipe(name, pattern, behavior):
+def validate_recipe(name, pattern, ingredients, behavior):
     recipe = json.loads(behavior[f"recipes/{name}.json"])
     require(recipe["format_version"] == "1.21.20", "Wrong recipe format version")
     shaped = recipe["minecraft:recipe_shaped"]
     require(shaped["description"]["identifier"] == f"waveform:{name}", "Wrong recipe ID")
     require(shaped["tags"] == ["crafting_table"] and shaped["pattern"] == pattern,
             "Wrong crafting station or recipe pattern")
-    require(shaped["key"] == {"D": {"item": "minecraft:diamond"},
-                              "N": {"item": "minecraft:netherite_ingot"},
-                              "H": {"item": "minecraft:heart_of_the_sea"}},
-            "Wrong recipe ingredients")
+    require(shaped["key"] == {symbol: {"item": item} for symbol, item in ingredients.items()},
+            f"Wrong ingredients for {name}")
     require(shaped["unlock"] == [{"item": "minecraft:diamond"}], "Wrong recipe unlock")
-    require(shaped["result"] == {"item": f"waveform:{name}", "count": 1}, "Wrong recipe output")
+    result = shaped["result"]
+    require(result == {"item": f"waveform:{name}", "count": 1} and type(result["count"]) is int,
+            f"Wrong output for {name}")
 
 
 def make_zip(files):
@@ -209,7 +226,7 @@ def main():
     packaged = read_zip(ARTIFACT.read_bytes(), packs)
     for name, files in packs.items():
         require(read_zip(packaged[name], files) == files, f"Stale or invalid files in {name}")
-    print(f"Validated pack JSON, UUIDs, stable API, recipes, Reanimation Table, textures and "
+    print(f"Validated pack JSON, UUIDs, stable API, recipes, Reanimation Table and its drop, textures and "
           f"{ARTIFACT.relative_to(ROOT)}")
 
 

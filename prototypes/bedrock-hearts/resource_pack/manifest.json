@@ -5,14 +5,14 @@
     "description": "Reanimation Table textures and Artificial Heart and Hearts Probe icons.",
     "pack_scope": "world",
     "uuid": "d28930da-140d-495b-9244-7774e677434c",
-    "version": [0, 4, 0],
+    "version": [0, 4, 1],
     "min_engine_version": [1, 26, 60]
   },
   "modules": [
     {
       "type": "resources",
       "uuid": "7fe46a4c-b216-4960-9c17-f6412735a217",
-      "version": [0, 4, 0]
+      "version": [0, 4, 1]
     }
   ]
 }

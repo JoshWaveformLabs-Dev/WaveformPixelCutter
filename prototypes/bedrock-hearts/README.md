@@ -1,6 +1,6 @@
 # Hearts & Lives development add-on
 
-Hearts & Lives **0.4.0** adds host-controlled difficulty presets and retains the Reanimation Table for retail Bedrock **26.60** with stable `@minecraft/server` **2.11.0**. Importing the development build upgrades the existing pack IDs and includes the Hearts Probe and its commands. [Download Hearts & Lives 0.4.0](dist/hearts-and-lives-dev.mcaddon) · [Standalone Hearts Probe 0.1.0](dist/hearts-probe.mcaddon)
+Hearts & Lives **0.4.1** makes the Reanimation Table craftable and relocatable for retail Bedrock **26.60** with stable `@minecraft/server` **2.11.0**. Importing the development build upgrades the existing pack IDs and includes the Hearts Probe and its commands. [Download Hearts & Lives 0.4.1](dist/hearts-and-lives-dev.mcaddon) · [Standalone Hearts Probe 0.1.0](dist/hearts-probe.mcaddon)
 
 Players begin with 10 lives and logical capacity for 10 hearts and 10 hunger icons. Death removes one of each. At zero lives the player enters Spectator on respawn and stays eliminated across reconnects. At a Reanimation Table, an Artificial Heart restores one of each and a Half Artificial Heart restores half of each. Recovery consumes one item from the selected stack on success. A player keeps the heart if the grant would exceed 10 or if they are eliminated. Chat reports the balance on spawn and recovery. Native health, hunger and HUD capacity are independent of this accounting.
 
@@ -29,7 +29,23 @@ A successful table recovery starts the configured cooldown for that player acros
 
 ## Reanimation Table
 
-In a disposable test world with cheats enabled, the host can obtain the table and a recovery test kit with these commands. The table has no crafting recipe in this build.
+Players start without a Reanimation Table. To make one in ordinary Survival, pick up a diamond to unlock the recipe and arrange these ingredients in a crafting table.
+
+```text
+O R O
+G C G
+O D O
+```
+
+- **O** is obsidian (4).
+- **R** is redstone dust (1).
+- **G** is a gold ingot (2).
+- **C** is a crafting table (1).
+- **D** is a diamond (1).
+
+The recipe yields one placeable Reanimation Table. Any eligible player can use the same placed table with their own Artificial Hearts. To relocate it, mine it in Survival with block drops enabled, pick up the dropped table, and place it at the new location.
+
+For development testing in a disposable world with cheats enabled, the host can still obtain a table and hearts with these commands.
 
 ```text
 /give @s waveform:reanimation_table 1
@@ -39,7 +55,7 @@ In a disposable test world with cheats enabled, the host can obtain the table an
 
 Place the table. Select a full or half heart in the hotbar, aim at the placed table, and press **Use/Interact** once. The default is right-click on Windows and L2 on PS5. Release the button before the next interaction. Recovery applies to the player using the table. The host can hand a test kit to a normal guest.
 
-## Recipes
+## Artificial Heart recipes
 
 Use a crafting table. **D** is a diamond, **N** is a netherite ingot, **H** is a Heart of the Sea, and **·** is empty. A diamond unlocks each recipe.
 
@@ -49,6 +65,10 @@ Use a crafting table. **D** is a diamond, **N** is a netherite ingot, **H** is a
 | Half Artificial Heart | `DN` / `DH` / `D·` | 3 diamonds, 1 netherite ingot, 1 Heart of the Sea |
 
 Each recipe yields one item. Use the crafted heart at the Reanimation Table.
+
+## Crafting and relocation test
+
+In a fresh Survival world with cheats and experiments off, confirm that players spawn without a table. Pick up a diamond, check recipe-book discovery, and craft the exact pattern above. Check that one table is produced and that the correct materials are consumed. Place it and have two eligible players recover at the same table. Mine it with an ordinary pickaxe and block drops enabled, collect the single drop, place it elsewhere, and repeat recovery. Run this check on retail Windows and repeat as a normal PS5 guest in the Windows-hosted world.
 
 ## Windows test
 
@@ -73,4 +93,4 @@ Each recipe yields one item. Use the crafted heart at the Reanimation Table.
 
 ## Build and validation
 
-Use Node.js 24 and Python 3. From this directory run `npm ci`, `npm run build`, and `npm run validate`. Validation compiles and type-checks against the pinned stable API, runs logic and mocked adapter tests, and verifies the pack manifests, UUIDs, recipes, block resources, textures and nested archives. Windows and PS5 gameplay tests are pending. [Session handover](HANDOVER.md)
+Use Node.js 24 and Python 3. From this directory run `npm ci`, `npm run build`, and `npm run validate`. Validation compiles and type-checks against the pinned stable API, runs logic and mocked adapter tests, and verifies the pack manifests, UUIDs, exact recipes, the table's self-drop, textures and nested archives. Windows and PS5 gameplay tests are pending. [Session handover](HANDOVER.md)
