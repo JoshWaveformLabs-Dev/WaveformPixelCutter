@@ -6,7 +6,7 @@ function signal() {
     }
 }
 
-export const EntityComponentTypes = { Health: "health", Inventory: "inventory" }
+export const EntityComponentTypes = { Health: "health", Hunger: "hunger", Inventory: "inventory" }
 export const GameMode = { Survival: "survival", Spectator: "spectator", Creative: "creative" }
 export const CustomCommandSource = { Entity: "entity", Block: "block" }
 export const CustomCommandStatus = { Success: 0, Failure: 1 }
@@ -14,16 +14,22 @@ export const CommandPermissionLevel = { Host: 3 }
 export const CustomCommandParamType = { PlayerSelector: "player", Enum: "enum", Integer: "integer" }
 
 const scheduled = []
+const timeouts = []
 const intervals = []
 export const system = {
     currentTick: 0,
     beforeEvents: { startup: signal() },
     run(callback) { scheduled.push(callback) },
+    runTimeout(callback, delay) { timeouts.push({ callback, due: this.currentTick + delay }) },
     runInterval(callback) { intervals.push(callback) },
     flush() { for (const callback of scheduled.splice(0)) callback() },
     advance() {
         this.currentTick += 1
         this.flush()
+        for (const timer of timeouts.filter(({ due }) => due <= this.currentTick)) {
+            timeouts.splice(timeouts.indexOf(timer), 1)
+            timer.callback()
+        }
         for (const callback of intervals) callback()
     },
 }
@@ -42,6 +48,10 @@ export class Player {
     typeId = "minecraft:player"
     isValid = true
     health = 20
+    healthMax = 20
+    hunger = { currentValue: 20, effectiveMax: 20 }
+    effects = new Map()
+    triggered = []
     mode = GameMode.Survival
     messages = []
     actionBar = []
@@ -63,8 +73,29 @@ export class Player {
     getGameMode() { return this.mode }
     setGameMode(mode) { this.mode = mode }
     sendMessage(message) { this.messages.push(message) }
+    getEffect(name) { return this.effects.get(name) }
+    triggerEvent(name) {
+        this.triggered.push(name)
+        const match = /^waveform_health:cap_([1-9]|1[0-9]|20)$/.exec(name)
+        if (!match) throw new Error(`Unknown player event ${name}`)
+        this.healthMax = Number(match[1])
+        this.health = this.healthMax
+    }
     getComponent(type) {
-        if (type === EntityComponentTypes.Health) return { currentValue: this.health, effectiveMax: 20 }
+        if (type === EntityComponentTypes.Health) {
+            const player = this
+            return {
+                get currentValue() { return player.health },
+                get effectiveMax() { return player.healthMax },
+                effectiveMin: 0,
+                setCurrentValue(value) {
+                    if (value < 0 || value > player.healthMax) return false
+                    player.health = value
+                    return true
+                },
+            }
+        }
+        if (type === EntityComponentTypes.Hunger) return this.hunger
         if (type === EntityComponentTypes.Inventory) return { container: this.inventory }
         return undefined
     }

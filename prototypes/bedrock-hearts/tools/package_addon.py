@@ -1,8 +1,10 @@
 """Build or verify the two nested Bedrock pack archives."""
 import argparse
+from hashlib import sha256
 import io
 import json
 from pathlib import Path
+import runpy
 import struct
 import uuid
 import zipfile
@@ -11,6 +13,9 @@ ROOT = Path(__file__).resolve().parents[1]
 ARTIFACT = ROOT / "dist/hearts-and-lives-dev.mcaddon"
 ENGINE = [1, 26, 60]
 SERVER = "2.11.0"
+VERSION = [0, 4, 2]
+NATIVE_PROBE = ROOT.parent / "bedrock-native-caps"
+PLAYER = "entities/player.json"
 ITEM_ATLAS = "textures/item_texture.json"
 TERRAIN_ATLAS = "textures/terrain_texture.json"
 ENTRY = "scripts/main.js"
@@ -53,7 +58,21 @@ def source_files(directory, expected):
     files = {path.relative_to(root).as_posix(): path.read_bytes()
              for path in root.rglob("*") if path.is_file()}
     require(files.keys() == set(expected), f"Unexpected payload in {directory}")
-    return files
+    # Produce the same archive from LF and Windows autocrlf checkouts.
+    return {name: data.replace(b"\r\n", b"\n") if name.endswith((".json", ".js")) else data
+            for name, data in files.items()}
+
+
+def native_player():
+    # Reuse the physical probe's generator and independent structural checks
+    # against its pinned vanilla player. Loading the tool does not run its CLI.
+    probe = runpy.run_path(str(NATIVE_PROBE / "tools/package_addons.py"))
+    baseline = (NATIVE_PROBE / "vendor/player.json").read_bytes()
+    require(sha256(baseline).hexdigest() == probe["BASELINE_SHA"], "Wrong retail player baseline")
+    args = (baseline, "waveform_health", range(1, 21), "minecraft:health")
+    player = probe["create_player"](*args)
+    probe["validate_player"](player, *args)
+    return player
 
 
 def collect_packs():
@@ -66,7 +85,10 @@ def collect_packs():
     behavior.update({f"scripts/{name}": data for name, data in
                      source_files(".build/scripts", ["main.js", "diagnostics.js", "lives-bedrock.js",
                                   "lives-state.js", "lives-store.js", "recovery.js",
-                                  "difficulty-bedrock.js", "difficulty-settings.js", "recovery-clock.js"]).items()})
+                                  "difficulty-bedrock.js", "difficulty-settings.js", "recovery-clock.js",
+                                  "native-health.js"]).items()})
+    behavior[PLAYER] = native_player()
+    behavior["LICENSE.txt"] = (NATIVE_PROBE / "vendor/LICENSE.md").read_bytes().replace(b"\r\n", b"\n")
     return {BP: behavior, RP: resources}
 
 
@@ -82,8 +104,7 @@ def validate_metadata(behavior, resources):
         require(header["min_engine_version"] == ENGINE, "Wrong retail baseline")
         require(header["name"] and header["description"], "Incomplete pack header")
         version = header["version"]
-        require(len(version) == 3 and all(type(part) is int and part >= 0 for part in version),
-                "Invalid pack version")
+        require(version == VERSION, "Wrong development pack version")
         require(len(modules) == len(expected_types) and
                 {module["type"] for module in modules} == expected_types, "Wrong module types")
         require(all(module["version"] == version for module in modules), "Wrong module version")
@@ -97,6 +118,9 @@ def validate_metadata(behavior, resources):
     require(script["language"] == "javascript" and script["entry"] == ENTRY and ENTRY in behavior,
             "Wrong script entry")
     resource_header = resource_manifest["header"]
+    require(behavior_manifest["header"]["uuid"] == "b585ec4d-eb4a-4de8-b685-09912fd68045" and
+            resource_header["uuid"] == "d28930da-140d-495b-9244-7774e677434c",
+            "Pack identity must survive upgrades and retain world dynamic properties")
     require(resource_header["pack_scope"] == "world", "Resource pack should attach to the world")
     require(not resource_manifest.get("dependencies"), "Unexpected resource pack dependencies")
     require(behavior_manifest["dependencies"] == [
@@ -106,6 +130,8 @@ def validate_metadata(behavior, resources):
 
     package = json.loads((ROOT / "package.json").read_bytes())
     lock = json.loads((ROOT / "package-lock.json").read_bytes())
+    require(package["version"] == lock["version"] == lock["packages"][""]["version"] ==
+            ".".join(map(str, VERSION)), "Package and manifest versions must agree")
     require(package["devDependencies"]["@minecraft/server"] == SERVER and
             lock["packages"]["node_modules/@minecraft/server"]["version"] == SERVER,
             "Installed declarations must match the stable script dependency")
@@ -226,7 +252,8 @@ def main():
     packaged = read_zip(ARTIFACT.read_bytes(), packs)
     for name, files in packs.items():
         require(read_zip(packaged[name], files) == files, f"Stale or invalid files in {name}")
-    print(f"Validated pack JSON, UUIDs, stable API, recipes, Reanimation Table and its drop, textures and "
+    print(f"Validated all 20 native health caps against the vanilla baseline, pack JSON, UUIDs, stable API, "
+          f"recipes, Reanimation Table and its drop, textures and "
           f"{ARTIFACT.relative_to(ROOT)}")
 
 

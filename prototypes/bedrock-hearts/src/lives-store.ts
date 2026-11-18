@@ -6,6 +6,20 @@ export interface LifeStore {
     write(playerId: string, encoded: string): void
 }
 
+// A throwing setter can still have committed the write. Always use readback
+// before releasing an eliminated player or projecting a migrated/debited cap.
+export function writeVerified(store: LifeStore, playerId: string, encoded: string): void {
+    let writeError: unknown
+    try {
+        store.write(playerId, encoded)
+    } catch (error) {
+        writeError = error
+    }
+    if (store.read(playerId) !== encoded) {
+        throw new Error(`Could not verify the life record for ${playerId}. ${writeError ?? ""}`)
+    }
+}
+
 export function reconcileSpawn(
     store: LifeStore,
     playerId: string,
@@ -20,7 +34,7 @@ export function reconcileSpawn(
     }
     const encoded = encodeState(state)
     if (raw !== encoded) {
-        store.write(playerId, encoded)
+        writeVerified(store, playerId, encoded)
     }
     return state
 }
@@ -31,7 +45,7 @@ export function recordDeath(store: LifeStore, playerId: string): LifeState | und
     if (before === after) {
         return undefined
     }
-    store.write(playerId, encodeState(after))
+    writeVerified(store, playerId, encodeState(after))
     return after
 }
 

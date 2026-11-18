@@ -12,7 +12,7 @@ const hooks = registerHooks({
     },
 })
 await import("../.build/scripts/main.js")
-const { DIFFICULTY_SETTINGS_KEY } = await import("../.build/scripts/difficulty-bedrock.js")
+const { DIFFICULTY_SETTINGS_KEY, PROGRESSIVE_HUNGER_KEY } = await import("../.build/scripts/difficulty-bedrock.js")
 hooks.deregister()
 
 const { decodeDifficultySettings, editRecoveryCooldown, encodeDifficultySettings, selectDifficultyPreset } =
@@ -398,4 +398,154 @@ test("an unsupported settings record is preserved and prevents any debit", (t) =
     assert.equal(state(player.id).lives, 14)
     assert.equal(player.inventory.getItem(0).amount, 3)
     assert.match(player.messages.at(-1), /recovery error/i)
+})
+
+test("death-screen disconnect, reconnect and world reload project only the saved player's maximum", (t) => {
+    const a = new Player("lifecycle-a")
+    const b = injured("lifecycle-b", 13)
+    rosterSpawn(a)
+    a.health = 0
+    die(a)
+    world.afterEvents.playerLeave.emit({ playerId: a.id })
+    assert.equal(state(a.id).awaitingRespawn, true)
+    assert.deepEqual(a.triggered, [], "the dead entity must not receive a cap")
+
+    const returning = new Player(a.id)
+    rosterSpawn(returning)
+    assert.equal(state(a.id).awaitingRespawn, false)
+    assert.equal(returning.healthMax, 18)
+    assert.equal(b.healthMax, 13)
+
+    const reopened = new Player(a.id)
+    reopened.health = 6
+    b.health = 5
+    const eventsBefore = [...b.triggered]
+    world.players = [reopened, b]
+    t.after(() => { world.players = [] })
+    world.afterEvents.worldLoad.emit()
+    rosterSpawn(reopened)
+    for (let i = 0; i < 20; i++) system.advance()
+    assert.deepEqual([reopened.health, reopened.healthMax], [6, 18])
+    assert.deepEqual(reopened.triggered, ["waveform_health:cap_18"])
+    assert.deepEqual([b.health, b.healthMax], [5, 13])
+    assert.deepEqual(b.triggered, eventsBefore)
+    assert.deepEqual([state(a.id).lives, state(b.id).lives], [18, 13])
+})
+
+test("table-only full and half grants update native HP, with vanilla hunger under both settings", (t) => {
+    t.after(() => saved.delete(PROGRESSIVE_HUNGER_KEY))
+    for (const enabled of [false, true]) {
+        if (enabled) saved.set(PROGRESSIVE_HUNGER_KEY, true)
+        const a = injured(`health-table-${enabled}`, 18)
+        const b = new Player(`other-${enabled}`)
+        rosterSpawn(b)
+        a.hunger.currentValue = 7
+        a.health = 0
+        die(a)
+        a.health = a.healthMax
+        world.afterEvents.playerSpawn.emit({ player: a, initialSpawn: false })
+        assert.equal(a.healthMax, 16)
+        assert.equal(a.messages.at(-1).includes("hunger target 8 icons (unenforced)"), enabled)
+        a.health = 5
+        interact(a, { block: tableAt("minecraft:dirt") })
+        system.advance()
+        assert.equal(a.healthMax, 16)
+        assert.equal(a.inventory.getItem(0).amount, 3)
+        interact(a)
+        system.advance()
+        assert.equal(a.healthMax, 18)
+        assert.equal(a.inventory.getItem(0).amount, 2)
+        a.inventory.setItem(0, new Stack(HALF, 2))
+        interact(a)
+        system.advance()
+        assert.equal(a.healthMax, 19)
+        assert.equal(a.inventory.getItem(0).amount, 1)
+        assert.equal(a.messages.at(-1).includes("hunger target 9.5 icons (unenforced)"), enabled)
+        a.inventory.setItem(0, new Stack(FULL, 1))
+        interact(a)
+        system.advance()
+        assert.equal(a.healthMax, 19)
+        assert.equal(a.inventory.getItem(0).amount, 1)
+        a.inventory.setItem(0, new Stack(HALF, 1))
+        interact(a)
+        system.advance()
+        assert.deepEqual([state(a.id).lives, a.healthMax, a.health], [20, 20, 5])
+        assert.equal(a.inventory.getItem(0), undefined)
+        assert.deepEqual(a.hunger, { currentValue: 7, effectiveMax: 20 })
+        assert.equal(b.healthMax, 20)
+        assert.deepEqual(b.triggered, [])
+    }
+})
+
+test("living v2 balances use saved hearts independently; elimination never requests zero HP", () => {
+    const a = new Player("v2-independent")
+    const key = `waveform:hearts_lives.${a.id}`
+    const record = '{"version":2,"lives":9,"hearts":5,"hunger":13,"awaitingRespawn":false,"recoveryReadyAt":201}'
+    saved.set(key, record)
+    rosterSpawn(a)
+    assert.equal(a.healthMax, 5)
+    assert.equal(saved.get(key), record)
+    const zeroHearts = record.replace('"hearts":5', '"hearts":0')
+    saved.set(key, zeroHearts)
+    rosterSpawn(a)
+    assert.equal(a.healthMax, 1)
+    assert.equal(saved.get(key), zeroHearts)
+
+    const b = injured("last-half", 3)
+    for (const lives of [1, 0]) {
+        system.advance()
+        b.health = 0
+        die(b)
+        b.health = b.healthMax
+        world.afterEvents.playerSpawn.emit({ player: b, initialSpawn: false })
+        assert.equal(state(b.id).lives, lives)
+        if (lives) assert.equal(b.healthMax, 1)
+    }
+    assert.equal(b.mode, GameMode.Spectator)
+    assert.deepEqual(b.triggered, ["waveform_health:cap_3", "waveform_health:cap_1"])
+    const host = new Player("reset-native-host")
+    commands.get("waveform:reset_lives").execute({ sourceType: CustomCommandSource.Entity, sourceEntity: host }, [b])
+    system.advance()
+    assert.deepEqual([b.mode, state(b.id).lives, b.healthMax], [GameMode.Survival, 20, 20])
+})
+
+test("a failed native projection cannot repeat a committed recovery debit or grant", (t) => {
+    const player = injured("retry-grant", 12)
+    const ignored = t.mock.method(player, "triggerEvent", () => {})
+    interact(player)
+    system.advance()
+    for (let i = 0; i < 60; i++) system.advance()
+    assert.equal(ignored.mock.callCount(), 3)
+    assert.equal(player.healthMax, 12)
+    assert.equal(state(player.id).hearts, 14)
+    assert.equal(player.inventory.getItem(0).amount, 2)
+    assert.match(player.messages.at(-1), /could not be verified/)
+    ignored.mock.restore()
+    world.afterEvents.playerLeave.emit({ playerId: player.id })
+    rosterSpawn(player)
+    assert.equal(player.healthMax, 14)
+    assert.equal(state(player.id).lives, 14)
+    assert.equal(player.inventory.getItem(0).amount, 2)
+})
+
+test("unreadable progression blocks cap events and test reset; an invalid hunger preference only affects its display", (t) => {
+    const a = new Player("unreadable")
+    const key = `waveform:hearts_lives.${a.id}`
+    const future = '{"version":99,"next":true}'
+    saved.set(key, future)
+    rosterSpawn(a)
+    commands.get("waveform:reset_lives").execute({ sourceType: CustomCommandSource.Entity, sourceEntity: a }, [a])
+    for (let i = 0; i < 60; i++) system.advance()
+    assert.equal(saved.get(key), future)
+    assert.deepEqual(a.triggered, [])
+
+    saved.set(PROGRESSIVE_HUNGER_KEY, "unexpected")
+    t.after(() => saved.delete(PROGRESSIVE_HUNGER_KEY))
+    const b = injured("bad-hunger-only", 11)
+    assert.equal(b.healthMax, 11)
+    interact(b)
+    system.advance()
+    assert.equal(b.healthMax, 13)
+    assert.equal(saved.get(PROGRESSIVE_HUNGER_KEY), "unexpected")
+    assert.match(b.messages.at(-1), /unreadable hunger setting/)
 })

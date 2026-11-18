@@ -10,13 +10,15 @@ import {
     world,
 } from "@minecraft/server"
 import type { Entity, ItemStack } from "@minecraft/server"
-import { encodeState, initialState, isEliminated } from "./lives-state.js"
+import { decodeState, encodeState, initialState, isEliminated } from "./lives-state.js"
 import type { LifeState, RecoveryUnits } from "./lives-state.js"
-import { reconcileSpawn, recordDeath, TickGate } from "./lives-store.js"
+import { reconcileSpawn, recordDeath, TickGate, writeVerified } from "./lives-store.js"
 import type { LifeStore } from "./lives-store.js"
 import { recover } from "./recovery.js"
-import { readDifficultySettings } from "./difficulty-bedrock.js"
+import { readDifficultySettings, readProgressiveHungerEnabled } from "./difficulty-bedrock.js"
+import { intendedHungerTargetUnits } from "./difficulty-settings.js"
 import { getRecoveryTick, reserveRecoveryTick } from "./recovery-clock.js"
+import { cancelHealthSync, reconcileNativeHealth } from "./native-health.js"
 
 const LABEL = "[Hearts & Lives]"
 const REANIMATION_TABLE = "waveform:reanimation_table"
@@ -62,36 +64,41 @@ function isStaleDeath(entity: Entity): boolean {
 }
 
 function balance(state: LifeState): string {
-    return `${state.lives / 2} lives | logical capacity ${state.hearts / 2} hearts, ${state.hunger / 2} hunger icons`
+    if (isEliminated(state)) return "Eliminated | 0 lives"
+    const summary = `${state.lives / 2} lives | saved health target ${Math.max(1, state.hearts) / 2} hearts`
+    try {
+        const enabled = readProgressiveHungerEnabled()
+        return enabled ? `${summary} | hunger target ${intendedHungerTargetUnits(state, enabled) / 2} icons (unenforced)` : summary
+    } catch {
+        // A malformed optional setting must not block native health or recovery.
+        return `${summary} | unreadable hunger setting`
+    }
 }
 
-function reconcilePlayer(player: Player, event: string): boolean {
-    if (!alive(player)) {
-        return false
-    }
-    const state = reconcileSpawn(store, player.id, true, (saved) => {
-        if (isEliminated(saved) && player.getGameMode() !== GameMode.Spectator) {
-            player.setGameMode(GameMode.Spectator)
-        }
+function reconcilePlayer(player: Player, event: string): void {
+    reconcileNativeHealth(player, event, () => {
+        const state = reconcileSpawn(store, player.id, true, (saved) => {
+            if (isEliminated(saved) && player.getGameMode() !== GameMode.Spectator) {
+                player.setGameMode(GameMode.Spectator)
+            }
+        })
+        log(event, player.id, { state })
+        player.sendMessage(`${LABEL} ${balance(state)}`)
+        return state
     })
-    log(event, player.id, { state })
-    player.sendMessage(`${LABEL} ${isEliminated(state) ? "Eliminated | " : ""}${balance(state)}`)
-    return true
 }
 
 function resetPlayer(player: Player): void {
     if (!alive(player)) {
         throw new Error("Wait until the target has respawned")
     }
+    decodeState(store.read(player.id)) // Leave unreadable or newer records intact.
     const state = initialState()
-    const encoded = encodeState(state)
-    store.write(player.id, encoded)
-    if (store.read(player.id) !== encoded) {
-        throw new Error("Could not verify the reset. Check the saved life record before retrying.")
-    }
+    writeVerified(store, player.id, encodeState(state))
     if (player.getGameMode() === GameMode.Spectator) {
         player.setGameMode(GameMode.Survival)
     }
+    reconcileNativeHealth(player, "reset", () => state)
     log("reset", player.id, { state })
     player.sendMessage(`${LABEL} Host test reset | ${balance(state)}`)
 }
@@ -121,8 +128,9 @@ function recoverAtTable(player: Player, index: number, item: ItemStack, units: R
         }
         return
     }
+    reconcileNativeHealth(player, "recovery", () => result.state)
     log("recovery", player.id, { state: result.state, recoveryTick, cooldownTicks })
-    player.sendMessage(`${LABEL} Restored ${units / 2} | ${balance(result.state)}`)
+    player.sendMessage(`${LABEL} Restored ${units / 2} life | ${balance(result.state)}`)
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => guarded("table interaction", () => {
@@ -195,21 +203,22 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => guarded("death", () =>
         !DEATHS.enter(deadEntity.id, system.currentTick)) {
         return
     }
+    cancelHealthSync(deadEntity.id)
+    pendingUses.delete(deadEntity.id)
     const state = recordDeath(store, deadEntity.id)
     if (state !== undefined) {
         log("death", deadEntity.id, { state })
     }
 }))
 
-world.afterEvents.playerLeave.subscribe(({ playerId }) => pendingUses.delete(playerId))
+world.afterEvents.playerLeave.subscribe(({ playerId }) => {
+    pendingUses.delete(playerId)
+    cancelHealthSync(playerId)
+})
 
 world.afterEvents.playerSpawn.subscribe(({ player }) => {
     pendingUses.delete(player.id)
-    let reconciled = false
-    guarded("spawn", () => { reconciled = reconcilePlayer(player, "spawn") })
-    if (!reconciled) {
-        system.run(() => guarded("spawn retry", () => reconcilePlayer(player, "spawn_retry")))
-    }
+    guarded("spawn", () => reconcilePlayer(player, "spawn"))
 })
 
 world.afterEvents.worldLoad.subscribe(() => {

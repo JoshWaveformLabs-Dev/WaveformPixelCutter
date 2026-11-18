@@ -113,3 +113,21 @@ test("v2 records retain a valid additive recovery expiry and reject invalid time
         assert.throws(() => decodeState(encodeState({ ...previous, recoveryReadyAt: bad })), /expiry/)
     }
 })
+
+test("spawn migration and death use durable readback even when a setter returns early or throws after writing", () => {
+    const legacy = '{"version":1,"units":9}'
+    const saved = new Map([["a", legacy]])
+    const ignored = { read: (id) => saved.get(id), write() {} }
+    assert.throws(() => reconcileSpawn(ignored, "a", true), /verify the life record/)
+    assert.throws(() => recordDeath(ignored, "a"), /verify the life record/)
+    assert.equal(saved.get("a"), legacy)
+
+    const ambiguous = { read: ignored.read, write(id, value) {
+        saved.set(id, value)
+        throw new Error("setter failed after commit")
+    } }
+    assert.equal(reconcileSpawn(ambiguous, "a", true).hearts, 9)
+    assert.equal(recordDeath(ambiguous, "a").hearts, 7)
+    assert.equal(recordDeath(ambiguous, "a"), undefined)
+    assert.equal(reconcileSpawn(ambiguous, "a", true).awaitingRespawn, false)
+})
