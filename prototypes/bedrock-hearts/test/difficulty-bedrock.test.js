@@ -12,13 +12,18 @@ const hooks = registerHooks({
         return nextResolve(specifier, context)
     },
 })
-const { DIFFICULTY_SETTINGS_KEY, readDifficultySettings } = await import("../.build/scripts/difficulty-bedrock.js")
+const { DIFFICULTY_SETTINGS_KEY, PROGRESSIVE_HUNGER_KEY, readDifficultySettings, readProgressiveHungerEnabled } =
+    await import("../.build/scripts/difficulty-bedrock.js")
 hooks.deregister()
 
 const VIEW = "waveform:difficulty_view"
 const SELECT = "waveform:difficulty_select"
 const COOLDOWN = "waveform:difficulty_cooldown"
+const HUNGER = "waveform:difficulty_hunger"
 const PRESET_ENUM = "waveform:difficulty_preset"
+const HUNGER_MODE_ENUM = "waveform:progressive_hunger_mode"
+const HUNGER_ON = /Progressive hunger is ON\b.*unenforced.*native hunger bar/i
+const HUNGER_OFF = /Progressive hunger is OFF\b/i
 const HOST = new Player("host")
 const GUEST = new Player("guest")
 const definitionByName = new Map()
@@ -41,28 +46,30 @@ const playerOrigin = (player) => ({
     sourceEntity: player,
 })
 
-function execute(name, origin, permission, ...args) {
-    // Model the engine's registered permission check before invoking the callback with cheats off.
+function execute(name, origin, permission, cheatsEnabled, ...args) {
+    // Model the engine's registered permission and cheats checks before invoking the callback.
     const definition = definitionByName.get(name)
-    if (permission < definition.permissionLevel || definition.cheatsRequired !== false) {
+    if (permission < definition.permissionLevel || (!cheatsEnabled && definition.cheatsRequired !== false)) {
         return { status: CustomCommandStatus.Failure }
     }
     return handlerByName.get(name)(origin, ...args)
 }
 
 function runAsHost(name, ...args) {
-    return execute(name, playerOrigin(HOST), CommandPermissionLevel.Host, ...args)
+    return execute(name, playerOrigin(HOST), CommandPermissionLevel.Host, false, ...args)
 }
 
 beforeEach(() => {
     saved.clear()
     HOST.messages.length = 0
+    GUEST.messages.length = 0
     HOST.isValid = true
 })
 
 test("all difficulty commands register host-only access and work with cheats off", () => {
     assert.deepEqual(enumByName.get(PRESET_ENUM), ["easy", "normal", "hard", "extreme"])
-    for (const name of [VIEW, SELECT, COOLDOWN]) {
+    assert.deepEqual(enumByName.get(HUNGER_MODE_ENUM), ["on", "off"])
+    for (const name of [VIEW, SELECT, COOLDOWN, HUNGER]) {
         assert.equal(definitionByName.get(name).permissionLevel, CommandPermissionLevel.Host)
         assert.equal(definitionByName.get(name).cheatsRequired, false)
     }
@@ -73,28 +80,41 @@ test("all difficulty commands register host-only access and work with cheats off
         { name: PRESET_ENUM, type: CustomCommandParamType.Enum },
         { name: "ticks", type: CustomCommandParamType.Integer },
     ])
+    assert.deepEqual(definitionByName.get(HUNGER).mandatoryParameters, [
+        { name: HUNGER_MODE_ENUM, type: CustomCommandParamType.Enum },
+    ])
 
     assert.equal(runAsHost(VIEW).status, CustomCommandStatus.Success)
     assert.deepEqual(HOST.messages, [])
     system.advance()
     assert.match(HOST.messages.at(-1), /active preset is Normal/)
     assert.match(HOST.messages.at(-1), /Provisional recovery cooldowns in ticks.*Easy 0.*Normal 0.*Hard 200.*Extreme 400/)
-    assert.equal(saved.has(DIFFICULTY_SETTINGS_KEY), false)
+    assert.match(HOST.messages.at(-1), HUNGER_OFF)
+    assert.equal(saved.size, 0)
 })
 
-test("normal guests, ordinary operators and non-player origins cannot change settings", () => {
-    for (const permission of [0, CommandPermissionLevel.Host - 1]) {
-        assert.equal(execute(SELECT, playerOrigin(GUEST), permission, "hard").status, CustomCommandStatus.Failure)
-        assert.equal(execute(COOLDOWN, playerOrigin(GUEST), permission, "easy", 42).status, CustomCommandStatus.Failure)
+test("guests, ordinary operators and non-player origins cannot view or change settings", () => {
+    const commands = [[VIEW], [SELECT, "hard"], [COOLDOWN, "easy", 42], [HUNGER, "on"], [HUNGER, "off"]]
+    for (const cheats of [false, true]) {
+        for (const permission of [0, CommandPermissionLevel.Host - 1]) {
+            for (const [name, ...args] of commands) {
+                const result = execute(name, playerOrigin(GUEST), permission, cheats, ...args)
+                assert.equal(result.status, CustomCommandStatus.Failure)
+            }
+        }
     }
     for (const origin of [
         { sourceType: CustomCommandSource.Block, sourceEntity: HOST },
         playerOrigin({ typeId: "minecraft:zombie" }),
     ]) {
-        assert.equal(execute(SELECT, origin, CommandPermissionLevel.Host, "hard").status, CustomCommandStatus.Failure)
+        for (const [name, ...args] of commands) {
+            assert.equal(execute(name, origin, CommandPermissionLevel.Host, false, ...args).status, CustomCommandStatus.Failure)
+        }
     }
     system.advance()
-    assert.equal(saved.has(DIFFICULTY_SETTINGS_KEY), false)
+    assert.equal(saved.size, 0)
+    assert.deepEqual(HOST.messages, [])
+    assert.deepEqual(GUEST.messages, [])
 })
 
 test("malformed commands and a host disconnect before execution cause no writes", () => {
@@ -102,10 +122,14 @@ test("malformed commands and a host disconnect before execution cause no writes"
     for (const [preset, ticks] of [["bad", 42], ["easy", "100"], ["hard", -1], ["hard", 1201], ["normal", 1.5], ["easy", NaN]]) {
         assert.equal(runAsHost(COOLDOWN, preset, ticks).status, CustomCommandStatus.Failure)
     }
+    for (const mode of [undefined, true, "ON", "yes", 0]) {
+        assert.equal(runAsHost(HUNGER, mode).status, CustomCommandStatus.Failure)
+    }
     assert.equal(runAsHost(SELECT, "extreme").status, CustomCommandStatus.Success)
+    assert.equal(runAsHost(HUNGER, "on").status, CustomCommandStatus.Success)
     HOST.isValid = false
     system.advance()
-    assert.equal(saved.has(DIFFICULTY_SETTINGS_KEY), false)
+    assert.equal(saved.size, 0)
     assert.deepEqual(HOST.messages, [])
 })
 
@@ -141,7 +165,57 @@ test("host edits independently and persists selection and both endpoints without
     })
 })
 
-test("legacy config is readable without writing and migrates on the next valid edit", () => {
+test("the host can persist and reload both hunger choices without touching player or preset data", (t) => {
+    const nativeReads = t.mock.method(HOST, "getComponent")
+    const rosterReads = t.mock.method(world, "getAllPlayers")
+    saved.set(DIFFICULTY_SETTINGS_KEY, JSON.stringify({ ...readDifficultySettings(), activePreset: "hard" }, null, 2))
+    saved.set("waveform:hearts_lives.host", '{"version":2,"lives":15,"hearts":9,"hunger":11,"awaitingRespawn":false}')
+    saved.set("waveform:hearts_lives.offline", '{"version":1,"units":7}')
+    const original = new Map(saved)
+    const snapshots = []
+    for (const [mode, enabled, feedback] of [["on", true, HUNGER_ON], ["off", false, HUNGER_OFF]]) {
+        const before = new Map(saved)
+        assert.equal(runAsHost(HUNGER, mode).status, CustomCommandStatus.Success)
+        assert.deepEqual(saved, before)
+        system.advance()
+        assert.match(HOST.messages.at(-1), feedback)
+        assert.deepEqual(saved, new Map([...original, [PROGRESSIVE_HUNGER_KEY, enabled]]))
+        snapshots.push({ data: new Map(saved), enabled, feedback })
+    }
+
+    const read = t.mock.method(world, "getDynamicProperty")
+    for (const { data, enabled, feedback } of snapshots) {
+        read.mock.mockImplementation((key) => data.get(key))
+        assert.equal(readProgressiveHungerEnabled(), enabled)
+        assert.equal(runAsHost(VIEW).status, CustomCommandStatus.Success)
+        system.advance()
+        assert.match(HOST.messages.at(-1), feedback)
+    }
+    assert.equal(nativeReads.mock.callCount(), 0)
+    assert.equal(rosterReads.mock.callCount(), 0)
+})
+
+test("selecting and editing every preset preserves either hunger choice with cheats enabled", () => {
+    const withCheats = (name, ...args) => execute(name, playerOrigin(HOST), CommandPermissionLevel.Host, true, ...args)
+    for (const [mode, enabled] of [["on", true], ["off", false]]) {
+        assert.equal(withCheats(HUNGER, mode).status, CustomCommandStatus.Success)
+        system.advance()
+        for (const [preset, ticks] of [["normal", 20], ["easy", 10], ["hard", 250], ["extreme", 350]]) {
+            withCheats(SELECT, preset)
+            withCheats(COOLDOWN, preset, ticks)
+            system.advance()
+            const settings = readDifficultySettings()
+            assert.equal(settings.activePreset, preset)
+            assert.equal(settings.presets[preset].recoveryCooldownTicks, ticks)
+            assert.equal(readProgressiveHungerEnabled(), enabled)
+        }
+        withCheats(VIEW)
+        system.advance()
+        assert.match(HOST.messages.at(-1), enabled ? HUNGER_ON : HUNGER_OFF)
+    }
+})
+
+test("legacy config survives a hunger edit and migrates on the next preset edit", () => {
     const legacy = JSON.stringify({
         version: 0,
         activePreset: "hard",
@@ -151,6 +225,12 @@ test("legacy config is readable without writing and migrates on the next valid e
     assert.equal(runAsHost(VIEW).status, CustomCommandStatus.Success)
     system.advance()
     assert.match(HOST.messages.at(-1), /active preset is Hard/)
+    assert.match(HOST.messages.at(-1), HUNGER_OFF)
+    assert.equal(saved.get(DIFFICULTY_SETTINGS_KEY), legacy)
+
+    assert.equal(runAsHost(HUNGER, "on").status, CustomCommandStatus.Success)
+    system.advance()
+    assert.match(HOST.messages.at(-1), HUNGER_ON)
     assert.equal(saved.get(DIFFICULTY_SETTINGS_KEY), legacy)
 
     assert.equal(runAsHost(COOLDOWN, "extreme", 500).status, CustomCommandStatus.Success)
@@ -165,19 +245,49 @@ test("legacy config is readable without writing and migrates on the next valid e
             extreme: { recoveryCooldownTicks: 500 },
         },
     })
+    assert.equal(readProgressiveHungerEnabled(), true)
 })
 
-test("corrupt and future records produce a host error and are preserved", (t) => {
+test("corrupt and future presets reject preset commands while both hunger edits preserve their bytes", (t) => {
     t.mock.method(console, "warn", () => {})
-    for (const raw of ["{broken", '{"version":42}', 42]) {
+    for (const raw of ["{broken", '{"version":2,"futureSetting":true}', '{"version":42}', 42]) {
         saved.set(DIFFICULTY_SETTINGS_KEY, raw)
+        const firstReply = HOST.messages.length
         assert.equal(runAsHost(VIEW).status, CustomCommandStatus.Success)
         assert.equal(runAsHost(SELECT, "hard").status, CustomCommandStatus.Success)
         assert.equal(runAsHost(COOLDOWN, "normal", 7).status, CustomCommandStatus.Success)
         system.advance()
         assert.equal(saved.get(DIFFICULTY_SETTINGS_KEY), raw)
-        assert.ok(HOST.messages.slice(-3).every((message) => /Difficulty settings error/.test(message)))
+        const replies = HOST.messages.slice(firstReply)
+        assert.equal(replies.length, 3)
+        assert.ok(replies.every((message) => /Difficulty settings error/.test(message)))
+
+        for (const [mode, enabled, feedback] of [["on", true, HUNGER_ON], ["off", false, HUNGER_OFF]]) {
+            assert.equal(runAsHost(HUNGER, mode).status, CustomCommandStatus.Success)
+            system.advance()
+            assert.match(HOST.messages.at(-1), feedback)
+            assert.equal(saved.get(PROGRESSIVE_HUNGER_KEY), enabled)
+            assert.equal(saved.get(DIFFICULTY_SETTINGS_KEY), raw)
+        }
     }
+})
+
+test("viewing or toggling either way preserves an unreadable hunger setting", (t) => {
+    t.mock.method(console, "warn", () => {})
+    const writes = t.mock.method(world, "setDynamicProperty")
+    for (const raw of [0, "false", '{"version":2,"enabled":true}']) {
+        saved.set(PROGRESSIVE_HUNGER_KEY, raw)
+        const firstReply = HOST.messages.length
+        runAsHost(VIEW)
+        runAsHost(HUNGER, "on")
+        runAsHost(HUNGER, "off")
+        system.advance()
+        assert.equal(saved.get(PROGRESSIVE_HUNGER_KEY), raw)
+        const replies = HOST.messages.slice(firstReply)
+        assert.equal(replies.length, 3)
+        assert.ok(replies.every((message) => /Invalid progressive hunger setting/.test(message)))
+    }
+    assert.equal(writes.mock.callCount(), 0)
 })
 
 test("an unconfirmed settings write reports failure without claiming success", (t) => {
@@ -186,6 +296,11 @@ test("an unconfirmed settings write reports failure without claiming success", (
     assert.equal(runAsHost(SELECT, "hard").status, CustomCommandStatus.Success)
     system.advance()
     assert.equal(saved.has(DIFFICULTY_SETTINGS_KEY), false)
+    assert.match(HOST.messages.at(-1), /Could not verify saved settings/)
+
+    assert.equal(runAsHost(HUNGER, "on").status, CustomCommandStatus.Success)
+    system.advance()
+    assert.equal(saved.has(PROGRESSIVE_HUNGER_KEY), false)
     assert.match(HOST.messages.at(-1), /Could not verify saved settings/)
 })
 

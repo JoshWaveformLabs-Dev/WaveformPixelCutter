@@ -2,16 +2,42 @@ import assert from "node:assert/strict"
 import { test } from "node:test"
 import {
     decodeDifficultySettings,
+    decodeProgressiveHungerEnabled,
     DIFFICULTY_PRESETS,
     editRecoveryCooldown,
     encodeDifficultySettings,
+    intendedHungerTargetUnits,
     isDifficultyPreset,
     isRecoveryCooldownTicks,
     MAX_RECOVERY_COOLDOWN_TICKS,
     selectDifficultyPreset,
 } from "../.build/scripts/difficulty-settings.js"
+import { decodeState, deductDeath, MAX_UNITS, planRecovery } from "../.build/scripts/lives-state.js"
 
 const cooldowns = (settings) => DIFFICULTY_PRESETS.map((name) => settings.presets[name].recoveryCooldownTicks)
+
+test("the world hunger setting defaults off and accepts only stored booleans", () => {
+    assert.equal(decodeProgressiveHungerEnabled(undefined), false)
+    assert.equal(decodeProgressiveHungerEnabled(false), false)
+    assert.equal(decodeProgressiveHungerEnabled(true), true)
+    for (const raw of [null, 0, 1, "false", "true", '{"version":2}', { x: 0, y: 0, z: 0 }]) {
+        assert.throws(() => decodeProgressiveHungerEnabled(raw), /Invalid progressive hunger setting/)
+    }
+})
+
+test("off targets full capacity and on follows saved hunger through migration, death and recovery", () => {
+    const migrated = decodeState('{"version":1,"units":13}')
+    // Distinct balances catch accidental use of the player's lives or health for the target.
+    const death = deductDeath({ ...migrated, lives: 8, hearts: 10 })
+    const half = planRecovery({ ...death, awaitingRespawn: false }, 1).state
+    const full = planRecovery(half, 2).state
+    for (const [state, hunger] of [[migrated, 13], [death, 11], [half, 12], [full, 14]]) {
+        assert.equal(state.hunger, hunger)
+        Object.freeze(state)
+        assert.equal(intendedHungerTargetUnits(state, false), MAX_UNITS)
+        assert.equal(intendedHungerTargetUnits(state, true), hunger)
+    }
+})
 
 test("an absent configuration defaults to Normal with provisional independent cooldowns", () => {
     const settings = decodeDifficultySettings(undefined)

@@ -1,3 +1,6 @@
+import { MAX_UNITS } from "./lives-state.js"
+import type { LifeState } from "./lives-state.js"
+
 export const DIFFICULTY_PRESETS = ["easy", "normal", "hard", "extreme"] as const
 export const MAX_RECOVERY_COOLDOWN_TICKS = 1200
 
@@ -11,6 +14,21 @@ export interface DifficultySettings {
     version: 1
     activePreset: DifficultyPreset
     presets: Record<DifficultyPreset, DifficultyPresetSettings>
+}
+
+export function decodeProgressiveHungerEnabled(raw: unknown): boolean {
+    if (raw === undefined) {
+        return false
+    }
+    if (typeof raw !== "boolean") {
+        throw new Error("Invalid progressive hunger setting")
+    }
+    return raw
+}
+
+/** Intended capacity in half-icon units. Death and recovery always update the saved hunger balance. */
+export function intendedHungerTargetUnits(state: Pick<LifeState, "hunger">, progressiveHungerEnabled: boolean): number {
+    return progressiveHungerEnabled ? state.hunger : MAX_UNITS
 }
 
 function defaultDifficultySettings(): DifficultySettings {
