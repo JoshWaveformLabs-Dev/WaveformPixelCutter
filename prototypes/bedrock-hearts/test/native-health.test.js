@@ -130,6 +130,39 @@ test("an ignored current HP correction cannot produce a clean verification", (t)
     assert.equal(player.triggered.length, 1)
 })
 
+test("damage and a changing Health Boost during a cap swap cannot conceal a refill", (t) => {
+    const log = healthLog(t)
+    const player = new Player("boost-race")
+    const apply = player.triggerEvent.bind(player)
+    t.mock.method(player, "triggerEvent", (name) => system.runTimeout(() => {
+        apply(name)
+        player.health--
+        player.effects.set("health_boost", { amplifier: 0 })
+    }, 1))
+    player.health = 4
+    sync(player, 18)
+    advance(20)
+    assert.equal(player.health, 4)
+    assert.equal(log.at(-1).event, "native_health_verified")
+    assert.equal(log.at(-1).effectiveMax, 22)
+})
+
+test("a read gap around a refill leaves later HP alone and reports the uncertain transition", (t) => {
+    const log = healthLog(t)
+    const player = new Player("read-gap")
+    player.health = 4
+    const get = player.getComponent.bind(player)
+    const readableAt = system.currentTick + 5
+    t.mock.method(player, "getComponent", (type) =>
+        player.triggered.length && system.currentTick < readableAt ? undefined : get(type))
+    sync(player, 18)
+    advance(60)
+    assert.equal(player.health, 18)
+    assert.equal(log.at(-1).event, "native_health_unverified")
+    assert.equal(log.at(-1).effectiveMax, 18)
+    assert.match(log.at(-1).error, /current HP/)
+})
+
 test("a superseded engine event arriving after the first read is repaired to the newest saved target", (t) => {
     const log = healthLog(t)
     const player = new Player("retarget")

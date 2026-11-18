@@ -9,7 +9,7 @@ const SETTLE_TICKS = 20
 const RETRY_WINDOW = 3 * SETTLE_TICKS
 interface HealthSync {
     player: Player
-    before?: { current: number; base: number; expected: number; sampled: number; sent: number; refused?: boolean }
+    before?: { current: number; base: number; sampled: number; sent: number }
 }
 const pending = new Map<string, HealthSync>()
 
@@ -28,6 +28,7 @@ export function reconcileNativeHealth(player: Player, reason: string, loadState:
     let initialEffectiveMax: number | undefined
     let dispatches = 0
     let lastError: string | undefined
+    let injuryError: string | undefined
 
     function report(event: string, effectiveMax: number | undefined, error?: string): void {
         const entry = `[Hearts & Lives] ${JSON.stringify({ event, playerId: id, reason, tick: system.currentTick,
@@ -37,21 +38,18 @@ export function reconcileNativeHealth(player: Player, reason: string, loadState:
     }
 
     // Adding a health group can initialize current HP to the group's value.
-    // Undo only an immediate, full refill caused by a cap transition. Never
-    // raise current HP, overwrite subsequent damage, or maintain a scripted HP bar.
-    function preserveInjury(health: EntityHealthComponent): void {
+    // The first observation can include damage after a group refill. Cap the
+    // transition at the last pre-swap HP, leaving any lower reading alone.
+    function preserveInjury(health: EntityHealthComponent, bonus: number): void {
         const injury = work.before
-        if (!injury || health.effectiveMax !== injury.expected) return
-        const current = health.currentValue
-        const refilled = current > injury.current && (current === injury.base || current === injury.expected)
-        if (refilled && system.currentTick - injury.sampled <= 2) {
-            injury.refused = true
-            health.setCurrentValue(injury.current)
-            if (health.currentValue !== injury.current) {
-                throw new Error("Could not verify preservation of current HP")
+        if (!injury || health.effectiveMax !== injury.base + bonus) return
+        if (health.currentValue > injury.current) {
+            if (system.currentTick - injury.sampled > 2) {
+                injuryError = "Could not verify current HP across the component change"
+            } else {
+                health.setCurrentValue(injury.current)
+                if (health.currentValue !== injury.current) throw new Error("Could not verify preservation of current HP")
             }
-        } else if (refilled && injury.refused) {
-            throw new Error("Current HP correction was unconfirmed")
         }
         work.before = undefined
     }
@@ -76,14 +74,15 @@ export function reconcileNativeHealth(player: Player, reason: string, loadState:
             measured = health.effectiveMax
             initialEffectiveMax ??= measured
             const boost = player.getEffect("health_boost")
-            expectedMax = targetMax + (boost ? 4 * (boost.amplifier + 1) : 0)
-            preserveInjury(health)
+            const bonus = boost ? 4 * (boost.amplifier + 1) : 0
+            expectedMax = targetMax + bonus
+            preserveInjury(health, bonus)
             matched = measured === expectedMax
             const now = system.currentTick
             if (matched) {
                 // A spawn or a superseded event can still change the maximum
                 // after the first sample. Confirm it after the settling window.
-                if (elapsed >= SETTLE_TICKS && !work.before) {
+                if (elapsed >= SETTLE_TICKS && !work.before && !injuryError) {
                     report("native_health_verified", measured)
                     cancelHealthSync(id)
                     return
@@ -96,20 +95,19 @@ export function reconcileNativeHealth(player: Player, reason: string, loadState:
                 // group, including damage/regeneration since dispatch.
                 work.before.current = health.currentValue
                 work.before.sampled = now
-                work.before.expected = expectedMax
             } else if (!final) {
-                work.before = { current: health.currentValue, base: targetMax, expected: expectedMax, sampled: now, sent: now }
+                work.before = { current: health.currentValue, base: targetMax, sampled: now, sent: now }
                 dispatches++
                 player.triggerEvent(`waveform_health:cap_${targetMax}`)
                 const immediate = player.getComponent(EntityComponentTypes.Health)
-                if (immediate) preserveInjury(immediate)
+                if (immediate) preserveInjury(immediate, bonus)
             }
         } catch (error) {
             lastError = String(error)
         }
         if (final) {
             cancelHealthSync(id)
-            report("native_health_unverified", measured, lastError)
+            report("native_health_unverified", measured, injuryError ?? lastError)
             try {
                 if (player.isValid) player.sendMessage("[Hearts & Lives] Native health could not be verified. Rejoin to retry and check the host Content Log.")
             } catch { /* The player can disconnect during the last readback. */ }
