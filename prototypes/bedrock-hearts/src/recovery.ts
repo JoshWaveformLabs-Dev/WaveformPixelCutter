@@ -9,8 +9,15 @@ export interface HeldSlot {
     write(stack: ItemStack | undefined): void
 }
 
+interface RecoveryTiming {
+    recoveryTick: number
+    cooldownTicks: number
+    reserve: (readyAt: number) => void
+}
+
 type Result = { state: LifeState } |
-    { denial: "eliminated" | "awaiting_respawn" | "over_cap" | "stale_item" }
+    { denial: "eliminated" | "awaiting_respawn" | "over_cap" | "stale_item" } |
+    { denial: "cooldown"; remainingTicks: number }
 
 function sameStack(left: ItemStack | undefined, right: ItemStack | undefined): boolean {
     if (left === undefined || right === undefined) {
@@ -36,16 +43,35 @@ export function recover(
     slot: HeldSlot,
     used: ItemStack,
     units: RecoveryUnits,
+    { recoveryTick, cooldownTicks, reserve }: RecoveryTiming,
 ): Result {
+    const readyAt = recoveryTick + cooldownTicks
+    if (!Number.isSafeInteger(recoveryTick) || recoveryTick < 0 ||
+        !Number.isSafeInteger(cooldownTicks) || cooldownTicks < 0 || !Number.isSafeInteger(readyAt)) {
+        throw new Error("Invalid recovery timing")
+    }
     const raw = store.read(playerId)
-    const plan = planRecovery(decodeState(raw), units)
+    const state = decodeState(raw)
+    const plan = planRecovery(state, units)
     if ("denial" in plan) {
         return plan
+    }
+
+    const remainingTicks = (state.recoveryReadyAt ?? 0) - recoveryTick
+    if (remainingTicks > 0) {
+        return { denial: "cooldown", remainingTicks }
     }
 
     const held = slot.read()
     if (held === undefined || !sameStack(held, used) || !slot.isSelected()) {
         return { denial: "stale_item" }
+    }
+    // Store the issued expiry with the grant so a retry cannot observe one without the other.
+    if (cooldownTicks === 0) {
+        delete plan.state.recoveryReadyAt
+    } else {
+        reserve(readyAt)
+        plan.state.recoveryReadyAt = readyAt
     }
     const before = held.clone()
     const debit = held.amount === 1 ? undefined : held.clone()

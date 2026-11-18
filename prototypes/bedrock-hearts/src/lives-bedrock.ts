@@ -15,6 +15,8 @@ import type { LifeState, RecoveryUnits } from "./lives-state.js"
 import { reconcileSpawn, recordDeath, TickGate } from "./lives-store.js"
 import type { LifeStore } from "./lives-store.js"
 import { recover } from "./recovery.js"
+import { readDifficultySettings } from "./difficulty-bedrock.js"
+import { getRecoveryTick, reserveRecoveryTick } from "./recovery-clock.js"
 
 const LABEL = "[Hearts & Lives]"
 const REANIMATION_TABLE = "waveform:reanimation_table"
@@ -32,8 +34,8 @@ const store: LifeStore = {
     write: (id, value) => world.setDynamicProperty(`waveform:hearts_lives.${id}`, value),
 }
 
-function log(event: string, playerId: string, state: LifeState): void {
-    console.log(`${LABEL} ${JSON.stringify({ event, playerId, tick: system.currentTick, state })}`)
+function log(event: string, playerId: string, details: object): void {
+    console.log(`${LABEL} ${JSON.stringify({ event, playerId, tick: system.currentTick, ...details })}`)
 }
 
 function guarded(event: string, operation: () => void): boolean {
@@ -72,7 +74,7 @@ function reconcilePlayer(player: Player, event: string): boolean {
             player.setGameMode(GameMode.Spectator)
         }
     })
-    log(event, player.id, state)
+    log(event, player.id, { state })
     player.sendMessage(`${LABEL} ${isEliminated(state) ? "Eliminated | " : ""}${balance(state)}`)
     return true
 }
@@ -90,7 +92,7 @@ function resetPlayer(player: Player): void {
     if (player.getGameMode() === GameMode.Spectator) {
         player.setGameMode(GameMode.Survival)
     }
-    log("reset", player.id, state)
+    log("reset", player.id, { state })
     player.sendMessage(`${LABEL} Host test reset | ${balance(state)}`)
 }
 
@@ -99,20 +101,27 @@ function recoverAtTable(player: Player, index: number, item: ItemStack, units: R
     if (!inventory?.isValid) {
         return
     }
+    const settings = readDifficultySettings()
+    const { recoveryCooldownTicks: cooldownTicks } = settings.presets[settings.activePreset]
+    const recoveryTick = getRecoveryTick()
     const result = recover(store, player.id, {
         isSelected: () => player.selectedSlotIndex === index,
         read: () => inventory.getItem(index),
         write: (stack) => inventory.setItem(index, stack),
-    }, item, units)
+    }, item, units, { recoveryTick, cooldownTicks, reserve: reserveRecoveryTick })
     if ("denial" in result) {
-        if (result.denial === "over_cap") {
+        if (result.denial === "cooldown") {
+            log("recovery_cooldown", player.id, { recoveryTick, remainingTicks: result.remainingTicks })
+            const unit = result.remainingTicks === 1 ? "tick" : "ticks"
+            player.sendMessage(`${LABEL} Recovery is ready in ${result.remainingTicks} more ${unit}.`)
+        } else if (result.denial === "over_cap") {
             player.sendMessage(`${LABEL} This heart would exceed the starting capacity.`)
         } else if (result.denial === "stale_item") {
             player.sendMessage(`${LABEL} Hold the matching stackable heart and try again.`)
         }
         return
     }
-    log("recovery", player.id, result.state)
+    log("recovery", player.id, { state: result.state, recoveryTick, cooldownTicks })
     player.sendMessage(`${LABEL} Restored ${units / 2} | ${balance(result.state)}`)
 }
 
@@ -188,7 +197,7 @@ world.afterEvents.entityDie.subscribe(({ deadEntity }) => guarded("death", () =>
     }
     const state = recordDeath(store, deadEntity.id)
     if (state !== undefined) {
-        log("death", deadEntity.id, state)
+        log("death", deadEntity.id, { state })
     }
 }))
 

@@ -12,7 +12,11 @@ const hooks = registerHooks({
     },
 })
 await import("../.build/scripts/main.js")
+const { DIFFICULTY_SETTINGS_KEY } = await import("../.build/scripts/difficulty-bedrock.js")
 hooks.deregister()
+
+const { decodeDifficultySettings, editRecoveryCooldown, encodeDifficultySettings, selectDifficultyPreset } =
+    await import("../.build/scripts/difficulty-settings.js")
 
 const components = new Map()
 const commands = new Map()
@@ -275,4 +279,123 @@ test("a failed reset write never releases an eliminated player", (t) => {
     assert.equal(target.mode, GameMode.Spectator)
     assert.equal(state(target.id).lives, 0)
     assert.match(host.messages.at(-1), /reset failed/i)
+})
+
+function configureCooldown(t, preset, ticks) {
+    const settings = selectDifficultyPreset(decodeDifficultySettings(undefined), preset)
+    saved.set(DIFFICULTY_SETTINGS_KEY, encodeDifficultySettings(editRecoveryCooldown(settings, preset, ticks)))
+    t.after(() => saved.delete(DIFFICULTY_SETTINGS_KEY))
+}
+
+test("both hearts share one player cooldown, with denial at N−1 and success at N", (t) => {
+    configureCooldown(t, "hard", 3)
+    const a = injured("cooldown-a")
+    const b = injured("cooldown-b")
+
+    interact(a)
+    system.advance()
+    const firstExpiry = state(a.id).recoveryReadyAt
+    assert.equal(state(a.id).lives, 16)
+    assert.ok(Number.isSafeInteger(firstExpiry))
+
+    a.inventory.setItem(0, new Stack(HALF, 2))
+    interact(b)
+    system.advance()
+    assert.equal(state(b.id).lives, 16, "another player can recover during A's cooldown")
+    assert.equal(state(b.id).recoveryReadyAt, firstExpiry + 1)
+
+    interact(a)
+    system.advance()
+    assert.match(a.messages.at(-1), /ready in 1 more tick\./)
+    assert.equal(state(a.id).lives, 16)
+    assert.equal(state(a.id).recoveryReadyAt, firstExpiry)
+    assert.equal(a.inventory.getItem(0).amount, 2)
+
+    interact(a)
+    system.advance()
+    assert.equal(state(a.id).lives, 17)
+    assert.equal(state(a.id).recoveryReadyAt, firstExpiry + 3)
+    assert.equal(a.inventory.getItem(0).amount, 1)
+    assert.equal(state(b.id).lives, 16)
+})
+
+test("an issued cooldown survives edits, a preset switch and a reopened world", (t) => {
+    configureCooldown(t, "hard", 4)
+    const a = injured("cooldown-reload")
+    interact(a)
+    system.advance()
+    const firstExpiry = state(a.id).recoveryReadyAt
+    const original = decodeDifficultySettings(saved.get(DIFFICULTY_SETTINGS_KEY))
+    const edited = selectDifficultyPreset(editRecoveryCooldown(original, "hard", 1), "normal")
+    saved.set(DIFFICULTY_SETTINGS_KEY, encodeDifficultySettings(edited))
+    system.advance()
+    world.afterEvents.playerLeave.emit({ playerId: a.id })
+
+    const returning = new Player(a.id)
+    returning.inventory.setItem(0, a.inventory.getItem(0))
+    world.players = [returning]
+    t.after(() => { world.players = [] })
+    // A new script session starts at its own tick. The saved checkpoint supplies its origin.
+    system.currentTick = 0
+    world.afterEvents.worldLoad.emit()
+    rosterSpawn(returning)
+    assert.equal(state(a.id).recoveryReadyAt, firstExpiry)
+
+    interact(returning)
+    system.advance()
+    assert.match(returning.messages.at(-1), /ready in 2 more ticks/)
+    assert.equal(returning.inventory.getItem(0).amount, 2)
+    system.advance()
+    interact(returning)
+    system.advance()
+    assert.equal(state(a.id).lives, 18)
+    assert.equal(state(a.id).recoveryReadyAt, undefined)
+
+    interact(returning)
+    system.advance()
+    assert.equal(state(a.id).lives, 20, "new Normal uses have zero delay")
+    assert.equal(returning.inventory.getItem(0), undefined)
+})
+
+test("an over-cap attempt and a failed save issue no player cooldown", (t) => {
+    configureCooldown(t, "extreme", 1200)
+    const overCap = injured("cooldown-overcap", 19)
+    interact(overCap)
+    system.advance()
+    assert.equal(state(overCap.id).recoveryReadyAt, undefined)
+    assert.equal(overCap.inventory.getItem(0).amount, 3)
+    overCap.inventory.setItem(0, new Stack(HALF, 1))
+    interact(overCap)
+    system.advance()
+    assert.equal(state(overCap.id).lives, 20)
+
+    const failure = injured("cooldown-write-failure")
+    const write = world.setDynamicProperty.bind(world)
+    const fault = t.mock.method(world, "setDynamicProperty", (key, value) => {
+        if (key === `waveform:hearts_lives.${failure.id}`) throw new Error("injected recovery write failure")
+        write(key, value)
+    })
+    interact(failure)
+    system.advance()
+    assert.equal(state(failure.id).recoveryReadyAt, undefined)
+    assert.equal(state(failure.id).lives, 14)
+    assert.equal(failure.inventory.getItem(0).amount, 3)
+    fault.mock.restore()
+    interact(failure)
+    system.advance()
+    assert.equal(state(failure.id).lives, 16)
+    assert.ok(state(failure.id).recoveryReadyAt >= 1200)
+})
+
+test("an unsupported settings record is preserved and prevents any debit", (t) => {
+    const future = '{"version":2,"futureSetting":true}'
+    saved.set(DIFFICULTY_SETTINGS_KEY, future)
+    t.after(() => saved.delete(DIFFICULTY_SETTINGS_KEY))
+    const player = injured("cooldown-invalid-settings")
+    interact(player)
+    system.advance()
+    assert.equal(saved.get(DIFFICULTY_SETTINGS_KEY), future)
+    assert.equal(state(player.id).lives, 14)
+    assert.equal(player.inventory.getItem(0).amount, 3)
+    assert.match(player.messages.at(-1), /recovery error/i)
 })

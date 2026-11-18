@@ -52,7 +52,8 @@ def collect_packs():
                              *(f"textures/items/{name}.png" for name in ITEMS)])
     behavior.update({f"scripts/{name}": data for name, data in
                      source_files(".build/scripts", ["main.js", "diagnostics.js", "lives-bedrock.js",
-                                  "lives-state.js", "lives-store.js", "recovery.js"]).items()})
+                                  "lives-state.js", "lives-store.js", "recovery.js",
+                                  "difficulty-bedrock.js", "difficulty-settings.js", "recovery-clock.js"]).items()})
     return {BP: behavior, RP: resources}
 
 

@@ -6,6 +6,7 @@ export interface LifeState {
     hearts: number
     hunger: number
     awaitingRespawn: boolean
+    recoveryReadyAt?: number
 }
 
 export type RecoveryUnits = 1 | 2
@@ -73,10 +74,18 @@ export function decodeState(raw: unknown): LifeState {
         "hearts" in data && isUnits(data.hearts) &&
         "hunger" in data && isUnits(data.hunger) &&
         "awaitingRespawn" in data && typeof data.awaitingRespawn === "boolean") {
-        return {
+        const state: LifeState = {
             version: 2, lives: data.lives, hearts: data.hearts, hunger: data.hunger,
             awaitingRespawn: data.awaitingRespawn,
         }
+        if ("recoveryReadyAt" in data) {
+            const readyAt = data.recoveryReadyAt
+            if (typeof readyAt !== "number" || !Number.isSafeInteger(readyAt) || readyAt < 0) {
+                throw new Error("Invalid Hearts & Lives recovery expiry")
+            }
+            state.recoveryReadyAt = readyAt
+        }
+        return state
     }
     throw new Error("Unsupported or invalid Hearts & Lives state")
 }

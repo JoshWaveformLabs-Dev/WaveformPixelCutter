@@ -102,3 +102,14 @@ test("the persisted death guard and eliminated state survive reload and reconnec
     assert.equal(isEliminated(reconcileSpawn(reopened, "a", true)), true)
     assert.equal(isEliminated(reconcileSpawn(memoryStore(), "a", true)), false)
 })
+
+test("v2 records retain a valid additive recovery expiry and reject invalid timestamps", () => {
+    const previous = initialState()
+    assert.deepEqual(decodeState(encodeState(previous)), previous)
+    const scheduled = { ...previous, recoveryReadyAt: 12345 }
+    assert.deepEqual(decodeState(encodeState(scheduled)), scheduled)
+    assert.equal(deductDeath(scheduled).recoveryReadyAt, 12345)
+    for (const bad of [-1, 1.25, "10", null, Number.MAX_SAFE_INTEGER + 1]) {
+        assert.throws(() => decodeState(encodeState({ ...previous, recoveryReadyAt: bad })), /expiry/)
+    }
+})

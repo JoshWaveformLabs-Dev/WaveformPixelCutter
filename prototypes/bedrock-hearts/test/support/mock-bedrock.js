@@ -14,14 +14,17 @@ export const CommandPermissionLevel = { Host: 3 }
 export const CustomCommandParamType = { PlayerSelector: "player", Enum: "enum", Integer: "integer" }
 
 const scheduled = []
+const intervals = []
 export const system = {
     currentTick: 0,
     beforeEvents: { startup: signal() },
     run(callback) { scheduled.push(callback) },
+    runInterval(callback) { intervals.push(callback) },
     flush() { for (const callback of scheduled.splice(0)) callback() },
     advance() {
         this.currentTick += 1
         this.flush()
+        for (const callback of intervals) callback()
     },
 }
 

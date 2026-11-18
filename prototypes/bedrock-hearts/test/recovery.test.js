@@ -1,7 +1,10 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import { decodeState, encodeState, initialState } from "../.build/scripts/lives-state.js"
-import { recover } from "../.build/scripts/recovery.js"
+import { recover as recoverWithTiming } from "../.build/scripts/recovery.js"
+
+const recover = (store, id, slot, item, units, timing = {}) =>
+    recoverWithTiming(store, id, slot, item, units, { recoveryTick: 0, cooldownTicks: 0, reserve() {}, ...timing })
 
 const FULL = "waveform:artificial_heart"
 const HALF = "waveform:half_artificial_heart"
