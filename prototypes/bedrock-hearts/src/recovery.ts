@@ -33,9 +33,9 @@ function refund(slots: DebitSlot[]): void {
             if (sameStack(slot.read(), slot.before)) continue
             if (!sameStack(slot.read(), slot.after)) throw new Error("rollback could not confirm its debit")
             // As with a debit, a throwing setter may already have committed.
-            try { slot.write(slot.before) } finally {
-                if (!sameStack(slot.read(), slot.before)) throw new Error("rollback did not restore inventory")
-            }
+            let writeFailure: unknown
+            try { slot.write(slot.before) } catch (error) { writeFailure = error }
+            if (!sameStack(slot.read(), slot.before)) throw new Error(`rollback did not restore inventory: ${writeFailure ?? "no change"}`)
         } catch (error) { failures.push(String(error)) }
     }
     if (failures.length) throw new Error(failures.join(", "))

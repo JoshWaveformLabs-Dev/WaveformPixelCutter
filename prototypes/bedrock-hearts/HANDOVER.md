@@ -1,23 +1,23 @@
-# Native health milestone
+# Reanimation Table V2 handover
 
-Hearts & Lives **0.4.2** upgrades the 0.4.1 packs in place using their existing UUIDs. The Windows development add-on includes both packs, the approved recipes, the Reanimation Table and the built-in Hearts Probe. [Development build](dist/hearts-and-lives-dev.mcaddon) · [Windows and PS5 test steps](README.md#windows-test)
+[Hearts & Lives 0.5.0](dist/hearts-and-lives-dev.mcaddon) builds on `feature/hearts-native-health` at `5916002`. The user confirmed ten starting lives and hearts, a one-life and one-native-heart loss per death, the shrinking vanilla HUD and persistent Spectator elimination after ten deaths on retail Windows in 0.4.2.
 
-## Saved progression and native health
+## Recovery
 
-- Each player begins at 10 lives and 20 HP. The player's saved heart units select one of 20 exclusive native health groups. Death costs 2 units. Full and half hearts restore 2 and 1 at the table. Zero lives uses Spectator. A legacy living record with zero heart units uses a nonlethal 1 HP floor.
-- Spawn, reconnect, world load, verified table grants and host test resets reconcile from the world record keyed by player ID. The Content Log records the measured maximum. Unconfirmed boundaries retry in order. Native retries never repeat an inventory debit. A world shutdown during a storage failure can lose an in-memory retry, and Bedrock saves inventory and dynamic properties separately.
-- The world keeps its existing player records, cooldowns, preset migrations and behavior-pack identity. A separate world boolean stores the host's hunger preference. It defaults OFF. ON displays an intended target derived from the saved hunger balance. Gameplay uses vanilla hunger in both modes.
+The table opens on an empty-hand use. A native form displays ingredient images, owned and required counts, shortfalls and two recovery buttons. It reads native maximum health independently of saved lives. Each grant spends the selected recipe from the initiating player's hotbar and backpack and runs the existing native-health reconciliation immediately. The original player definition, saved-life format, world properties, pack UUIDs and optional hunger preference are retained. Previously crafted Artificial Hearts remain redeemable.
 
-## Automated evidence
+Only Normal material prices have approval. Easy, Hard and Extreme currently point to those prices. Host-only preset and cooldown commands retain their existing behavior. [Recipe data](src/recovery-materials.ts) · [Player guide and prices](README.md#using-the-station)
 
-Stable API type-checking, 81 add-on tests, and nested archive validation passed. The same 81 tests also passed against scripts extracted from the delivered archive with mock entity events resolved from its actual player definition. Five standalone probe tests and both diagnostic archive checks passed in a temporary copy. The approved recipes and standalone diagnostic payloads match the development base.
+## Retail API
 
-If native HP becomes unreadable across a group swap, the log flags an uncertain refill. The script leaves later current HP alone once it can no longer distinguish a refill from ordinary healing.
+Bedrock 26.60 shipped stable server 2.11.0 and server-ui 2.3.0. The station uses `CustomForm` with labels, images, server-updated observables and disabled native buttons. Inventory payment occurs on the host after selection. The three ingredient textures ship in the world resource pack under its own UUID. [Retail release notes](https://feedback.minecraft.net/hc/en-us/articles/49852828563853-Minecraft-Bedrock-Edition-26-60-Changelog) · [CustomForm reference](https://learn.microsoft.com/en-us/minecraft/creator/scriptapi/minecraft/server-ui/customform?view=minecraft-bedrock-stable) · [Mojang texture source](https://github.com/Mojang/bedrock-samples/tree/15701fa9c13923f12662984c32c124327e40e3d3/resource_pack/textures/items)
 
-## Gameplay evidence still needed
+## Save behavior
 
-The reported physical Windows result belongs to the standalone Native Health Probe. The native maximum fell from 20 to 10, the HUD showed five hearts, and fall death followed by respawn preserved both. The integrated pack awaits physical testing.
+One session per player accepts one selection. Selection rechecks the placed block, six-block proximity, dimension, life state, cooldown, host settings and inventory. A synchronous transaction verifies each affected slot and the saved grant. Confirmed failures refund the exact debits, including partial stacks. If a storage read cannot establish whether a grant committed, the host receives an error. Bedrock saves inventory and world properties separately, so a hard process shutdown between writes can leave a mismatch. Native health retries use the committed balance and never charge again.
 
-1. On Windows, import into a disposable Survival world or upgrade a copy. Follow the 20, 16, 18, 19, 20 HP sequence in the README. Record current HP, measured maximum and HUD screenshots, both players' IDs, inventory counts, rejoin and save/reopen results. Check the final half-life, Spectator, injury preservation and natural healing.
-2. On a stock PS5, join the Windows host as a normal member, accept the resource pack and repeat the same transitions with L2. Compare each player's HUD against their own readings in the host log. Check that the guest cannot edit settings.
-3. Native hunger needs a separate retail probe world. Measure maximum and current food, HUD, eating/refill, sprint threshold and natural regeneration through death, reconnect and reload. Establish even and odd capacities and multiplayer isolation on Windows and PS5 before enabling enforcement. [Standalone hunger test procedure](../bedrock-native-caps/HANDOVER.md)
+## Validation
+
+All 88 automated tests passed against the local build and again against the scripts extracted from the delivered add-on. The packaged player definition, native-health script, life state and store, recovery clock and difficulty command script were byte-identical to their 0.4.2 counterparts. The suite covers recovery sizes, four presets, shortages, multiplayer isolation, native maximum and injury preservation, held input, dismissals, cooldown expiry while open, stale forms and partial payment failures. The packager verifies both nested archives, the 20 native health groups, preserved pack identities, the table recipe and drop, and the UI scripts and images.
+
+Physical acceptance of the 0.5.0 form remains open on Windows and a stock PS5 guest. Check icon rendering, controller navigation, the 16 → 18 → 19 → 20 HP sequence, both inventories and save/reopen. [Windows test](README.md#windows-test) · [PS5 guest test](README.md#ps5-guest-test)

@@ -21,7 +21,15 @@ export const system = {
     beforeEvents: { startup: signal() },
     run(callback) { scheduled.push(callback) },
     runTimeout(callback, delay) { timeouts.push({ callback, due: this.currentTick + delay }) },
-    runInterval(callback) { intervals.push(callback) },
+    runInterval(callback, delay = 1) {
+        const entry = { callback, delay }
+        intervals.push(entry)
+        return entry
+    },
+    clearRun(entry) {
+        const index = intervals.indexOf(entry)
+        if (index >= 0) intervals.splice(index, 1)
+    },
     flush() { for (const callback of scheduled.splice(0)) callback() },
     advance() {
         this.currentTick += 1
@@ -30,7 +38,7 @@ export const system = {
             timeouts.splice(timeouts.indexOf(timer), 1)
             timer.callback()
         }
-        for (const callback of intervals) callback()
+        for (const { callback, delay } of [...intervals]) if (this.currentTick % delay === 0) callback()
     },
 }
 
@@ -58,7 +66,9 @@ export class Player {
     onScreenDisplay = { setActionBar: (message) => this.actionBar.push(message) }
     selectedSlotIndex = 0
     dimension = { id: "minecraft:overworld" }
+    location = { x: 3, y: 70, z: 4 }
     inventory = {
+        size: 36,
         isValid: true,
         stacks: new Map(),
         getItem(index) { return this.stacks.get(index)?.clone() },

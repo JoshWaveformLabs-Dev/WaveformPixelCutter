@@ -8,6 +8,7 @@ const mockServerUrl = new URL("./support/mock-bedrock.js", import.meta.url).href
 const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
         if (specifier === "@minecraft/server") return { shortCircuit: true, url: mockServerUrl }
+        if (specifier === "@minecraft/server-ui") return { shortCircuit: true, url: new URL("./support/mock-ui.js", import.meta.url).href }
         return nextResolve(specifier, context)
     },
 })
@@ -126,11 +127,10 @@ test("table defers full and half recovery and debits only the initiating player'
     assert.equal(components.has("waveform:recover_capacity"), false)
 })
 
-test("ordinary blocks, empty hands, unrelated items and already canceled actions cannot restore capacity", () => {
+test("ordinary blocks, unrelated items and already canceled actions cannot restore capacity", () => {
     const player = injured("table-only")
     for (const options of [
         { block: tableAt("minecraft:crafting_table") },
-        { itemStack: undefined },
         { itemStack: new Stack("minecraft:stone", 1) },
         { itemStack: new Stack(TABLE, 1) },
         { itemStack: new Stack("waveform:hearts_probe", 1) },

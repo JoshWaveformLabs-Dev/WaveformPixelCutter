@@ -1,6 +1,6 @@
 # Hearts & Lives prototype test plan
 
-All cases are planned. No Minecraft tests have been run. [Hearts & Lives feasibility](hearts-feasibility.md)
+This is the original prototype test plan. Retail Windows testing of 0.4.2 confirmed death deductions, the shrinking native heart HUD and persistent Spectator elimination. The current Reanimation Table uses raw materials and an empty-hand interface. [Current acceptance steps and evidence](../prototypes/bedrock-hearts/HANDOVER.md) · [Original feasibility study](hearts-feasibility.md)
 
 ## Setup and order
 

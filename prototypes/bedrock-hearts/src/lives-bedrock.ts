@@ -15,7 +15,7 @@ import type { LifeState, RecoveryUnits } from "./lives-state.js"
 import { reconcileSpawn, recordDeath, TickGate, writeVerified } from "./lives-store.js"
 import type { LifeStore } from "./lives-store.js"
 import { showRecoveryForm } from "./recovery-form.js"
-import { inspectMaterials, inventoryCounts, recoveryPrices } from "./recovery-materials.js"
+import { materialPayment, inventoryCounts, recoveryPrices } from "./recovery-materials.js"
 import { recover, restoreCapacity } from "./recovery.js"
 import { readDifficultySettings, readProgressiveHungerEnabled } from "./difficulty-bedrock.js"
 import type { DifficultySettings } from "./difficulty-settings.js"
@@ -158,10 +158,8 @@ function recoverAtTable(player: Player, inventory: Container, settings: Difficul
         isSelected: () => player.selectedSlotIndex === legacy.index,
         read: () => inventory.getItem(legacy.index),
         write: stack => inventory.setItem(legacy.index, stack),
-    }, legacy.item, units, timing) : restoreCapacity(store, player.id, units, () => {
-        const materials = inspectMaterials(inventory, recoveryPrices[settings.activePreset][units])
-        return materials.affordable ? materials.slots : "missing_materials"
-    }, timing)
+    }, legacy.item, units, timing) : restoreCapacity(store, player.id, units,
+        () => materialPayment(inventory, recoveryPrices[settings.activePreset][units]), timing)
     if ("denial" in result) {
         if (result.denial === "cooldown") {
             log("recovery_cooldown", player.id, { recoveryTick, remainingTicks: result.remainingTicks })
@@ -178,7 +176,7 @@ function recoverAtTable(player: Player, inventory: Container, settings: Difficul
     }
     reconcileNativeHealth(player, "recovery", () => result.state)
     log("recovery", player.id, { state: result.state, recoveryTick, cooldownTicks })
-    player.sendMessage(`${LABEL} Restored ${units / 2} life | ${balance(result.state)}`)
+    player.sendMessage(`${LABEL} Restored ${units / 2} life and ${units / 2} maximum heart | ${balance(result.state)}`)
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => guarded("table interaction", () => {

@@ -49,20 +49,18 @@ export function inventoryCounts(inventory: Inventory): Map<string, number> {
     return counts
 }
 
-export function inspectMaterials(inventory: Inventory, recipe: Recipe) {
-    const rows = recipe.map(ingredient => ({ ...ingredient, owned: 0 }))
-    const byId = new Map(rows.map(row => [row.id, row]))
+export function materialPayment(inventory: Inventory, recipe: Recipe): DebitSlot[] | "missing_materials" {
+    const remaining = new Map(recipe.map(row => [row.id, row.required]))
     const slots: DebitSlot[] = []
-    for (let index = 0; index < inventory.size; index++) {
+    for (let index = 0; index < inventory.size && remaining.size; index++) {
         const stack = inventory.getItem(index)
         if (!stack) continue
-        const row = byId.get(stack.typeId)
-        if (!row) continue
-        const take = Math.min(stack.amount, row.required - row.owned)
-        row.owned += stack.amount
-        if (take > 0) {
-            slots.push(debitSlot(stack, take, () => inventory.getItem(index), value => inventory.setItem(index, value)))
-        }
+        const needed = remaining.get(stack.typeId)
+        if (!needed) continue
+        const take = Math.min(stack.amount, needed)
+        slots.push(debitSlot(stack, take, () => inventory.getItem(index), value => inventory.setItem(index, value)))
+        if (take === needed) remaining.delete(stack.typeId)
+        else remaining.set(stack.typeId, needed - take)
     }
-    return { rows, slots, affordable: rows.every(row => row.owned >= row.required) }
+    return remaining.size ? "missing_materials" : slots
 }

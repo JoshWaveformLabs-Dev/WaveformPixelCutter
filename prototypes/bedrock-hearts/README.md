@@ -1,8 +1,8 @@
 # Hearts & Lives development add-on
 
-Hearts & Lives **0.4.2** integrates native maximum health into the complete 0.4.1 add-on for retail Bedrock **26.60** and stable `@minecraft/server` **2.11.0**. Both packs keep their existing UUIDs so an import can upgrade a 0.4.1 installation and use its saved progression. [Download Hearts & Lives 0.4.2](dist/hearts-and-lives-dev.mcaddon) · [Standalone Hearts Probe 0.1.0](dist/hearts-probe.mcaddon)
+Hearts & Lives **0.5.0** upgrades the retail-tested Windows 0.4.2 packs in place. Import the add-on and enable its behavior and resource packs together. It targets Bedrock **26.60**, stable `@minecraft/server` **2.11.0** and `@minecraft/server-ui` **2.3.0**. The pack UUIDs and saved player records carry forward. [Download Hearts & Lives](dist/hearts-and-lives-dev.mcaddon) · [Standalone Hearts Probe](dist/hearts-probe.mcaddon)
 
-Players begin with **10 lives and 10 native maximum hearts**. Each death costs one life and one maximum heart. At a Reanimation Table, a full Artificial Heart restores one of each and a half restores half of each. A successful recovery consumes one item from the selected stack. A player keeps the item if the grant would exceed 10 or if they are eliminated. Zero lives puts that player in Spectator on respawn, including after a rejoin.
+Players start with **10 lives and 10 native maximum hearts**. Each death removes one of each. At zero lives the player enters Spectator on respawn. To recover before elimination, select an empty hotbar slot and use a placed Reanimation Table. Each Restore button spends materials from your own inventory and raises both your remaining lives and your native maximum health.
 
 The pack defines health groups for every living maximum from **1 through 20 HP**. On spawn, reconnect, world load, recovery and host test reset, the script reads the player's native maximum and reconciles it with the saved heart balance. The host Content Log records the player ID, reason, initial reading, saved target and measured `effectiveMax`. A failed readback produces `native_health_unverified`. The grant and inventory debit are already saved when a recovery needs a native retry. Rejoining retries synchronization.
 
@@ -32,7 +32,7 @@ Run these commands in chat as the world host. They are registered with stable Ho
 
 Each edit changes the named preset. Easy must stay at or below Normal. Raise Normal before a higher Easy edit, or lower Easy before lowering Normal past it. Selecting a preset or editing its value saves it for this world.
 
-A successful table recovery starts the configured cooldown for that player across both heart types. An existing cooldown keeps its issued deadline through edits, preset switches, and a graceful save and reopen. Denied attempts keep the item and leave the deadline unchanged. A cooldown uses gameplay ticks while the world runs. The existing host test reset clears the target player's cooldown along with resetting their balances.
+A successful table recovery starts the configured cooldown for that player across both recovery sizes. An existing cooldown keeps its issued deadline through edits, preset switches, and a graceful save and reopen. Denied attempts keep the materials and leave the deadline unchanged. A cooldown uses gameplay ticks while the world runs. The existing host test reset clears the target player's cooldown along with resetting their balances.
 
 ## Reanimation Table
 
@@ -50,29 +50,20 @@ O D O
 - **C** is a crafting table (1).
 - **D** is a diamond (1).
 
-The recipe yields one placeable Reanimation Table. Any eligible player can use the same placed table with their own Artificial Hearts. To relocate it, mine it in Survival with block drops enabled, pick up the dropped table, and place it at the new location.
+The recipe makes one table. Mine it with block drops enabled to relocate it. Players can share a table. Each player sees their own inventory and cooldown.
 
-For development testing in a disposable world with cheats enabled, the host can still obtain a table and hearts with these commands.
+### Using the station
 
-```text
-/give @s waveform:reanimation_table 1
-/give @s waveform:artificial_heart 3
-/give @s waveform:half_artificial_heart 3
-/give @s waveform:hearts_probe 1
-```
+Select an empty hotbar slot and right-click the table on Windows or use **L2** with the default PS5 controls. The screen shows remaining lives, measured native maximum hearts, the recoverable base limit, the active difficulty and the cooldown. Each ingredient shows your total across hotbar and backpack slots, the quantity each option needs and how many are missing. The counts and cooldown refresh once per second of gameplay while the screen is open.
 
-Place the table. Select a full or half heart in the hotbar, aim at the placed table, and press **Use/Interact** once. The default is right-click on Windows and L2 on PS5. Release the button before the next interaction. Recovery applies to the player using the table. The host can hand a test kit to a normal guest.
+| Restore | Diamonds | Netherite Ingots | Heart of the Sea | Gain |
+| --- | ---: | ---: | ---: | --- |
+| 1 heart | 6 | 2 | 1 | 1 life and 1 maximum heart |
+| ½ heart | 3 | 1 | 1 | ½ life and ½ maximum heart |
 
-## Artificial Heart recipes
+**Normal costs are approved. Easy, Hard and Extreme provisionally use the same costs** until their own recipes are approved. The four entries are configurable in the [recovery price table](src/recovery-materials.ts). Each preset retains its own cooldown.
 
-Use a crafting table. **D** is a diamond, **N** is a netherite ingot, **H** is a Heart of the Sea, and **·** is empty. A diamond unlocks each recipe.
-
-| Item | Rows, top to bottom | Cost |
-| --- | --- | --- |
-| Artificial Heart | `DND` / `DHD` / `DND` | 6 diamonds, 2 netherite ingots, 1 Heart of the Sea |
-| Half Artificial Heart | `DN` / `DH` / `D·` | 3 diamonds, 1 netherite ingot, 1 Heart of the Sea |
-
-Each recipe yields one item. Use the crafted heart at the Reanimation Table.
+Select the enabled recovery size to pay immediately. At 9½ lives, only a half recovery fits. At full capacity, both buttons are disabled. Close the screen to gather missing materials. Existing Artificial Hearts from earlier worlds can still be redeemed by holding one and using the table. The two legacy heart recipes have been removed from the pack.
 
 ## Crafting and relocation test
 
@@ -80,39 +71,28 @@ In a fresh Survival world with cheats and experiments off, confirm that players 
 
 ## Windows test
 
-For a quick acceptance run, enable the two **Hearts & Lives 0.4.2** packs alone in a disposable Survival world. Other packs that replace `minecraft:player`, including the standalone Native Health and Native Hunger probes, can take precedence. The **Hearts Probe item included here** reads the integrated player's actual attributes. Use it in air after each step and capture the HUD after natural healing. Allow up to 60 gameplay ticks for reconciliation. Keep player B alive at the starting maximum for comparison.
+The user physically confirmed the 0.4.2 Windows baseline through all ten deaths, the shrinking vanilla HUD, zero-life Spectator and a save/quit/reopen. The following checks cover the new 0.5.0 form.
 
-| Action by player A | Lives | Expected HP maximum without Health Boost |
-| --- | ---: | ---: |
-| First spawn | 10 | 20 |
-| Die and respawn twice | 8 | 16 |
-| Use a full heart at the table | 9 | 18 |
-| Use a half heart at the table | 9½ | 19 |
-| Leave, rejoin, save and reopen | 9½ | 19 |
-| Use a second half heart at the table | 10 | 20 |
-
-Damage A nonlethally before recovery and check current HP immediately afterward. Let food or a healing potion restore HP to the new ceiling. At 19 HP, capture the final half-heart appearance when fully healed. At every step, B should still have 20 maximum HP and both hunger maxima should read 20. Repeat a reduced-cap join with an active Health Boost in a cheats-enabled copy and check the measured maximum both during the effect and after it expires.
-
-1. In retail Minecraft for Windows, enable **Content Log File** under **Settings → Creator** and use **Info** or **Verbose** logging. Import the development `.mcaddon` and activate both Hearts & Lives packs in a disposable Survival world. Keep all experiments off. Record the exact game build, pack versions and cheats setting. Use a cheats-enabled test copy for `/give`, `reset_lives`, and `set_current`. Use default Normal for the recovery checks below.
-2. Confirm the Reanimation Table name, inventory icon, placed appearance and normal placement in Survival. Check both heart recipes for unlock, exact costs, output names and icons, and the absence of a full-to-half conversion. With two players online, bring player A to 8 lives by dying twice, while B remains at 10. On respawn, use a heart in empty air, on another block, and then at the table. Each of the first two attempts should leave the balance at 8 and the stack intact. At the table, one full heart should take A to 9. A half heart should take A to 9½. At 9½, verify the full heart is retained, then use a half heart to reach 10. Verify both hearts are retained at 10 and B remains at 10 throughout.
-3. With enough deficit and at least two hearts in the selected stack, hold Use/Interact on the table. Expect one debit and one grant. Release and press again to test a second grant and consumption of the last item. Try an empty hand, a different item, quick slot changes, dropping the item, and breaking the table during an interaction. Match each successful recovery log to its player, debit and grant. Upgrade a disposable v0.4.1 world copy with a known reduced balance and any active cooldown. Verify the expected native maximum, inventory and remaining cooldown after a graceful save and reopen.
-4. Repeat a death followed by a rejoin, a disconnect on the death screen, and a non-player death. Check the `[Hearts & Lives]` log for player IDs, one deduction per player death and correct spawn balances. At zero, verify Spectator immediately on respawn and after rejoin and world reopen. Attempt table use as the eliminated player and verify the other player can still play. In a cheats-enabled copy, the host can run `/waveform:reset_lives @s` or target exactly one online player by name. Reset restores all three balances and returns a Spectator target to Survival after verifying the saved state. Check that normal members are denied this command.
-5. Use **Hearts Probe** (`waveform:hearts_probe`) while aiming into empty air. Check the action bar and `[Hearts Probe]` log for native attributes. In a cheats-enabled copy the host can run `/waveform:set_current health 18` or `/waveform:set_current hunger 18` to test the current-value readback.
+1. Import 0.5.0 into a disposable world or a copy of a 0.4.2 world. Enable both Hearts & Lives packs, with experiments off. Use a separate world for the standalone probes. Enable the Creator Content Log and record the game build and pack versions.
+2. On Normal, have A die twice while B stays alive. Place a table. Give A four diamonds, two netherite ingots and one Heart of the Sea. With an empty hand, open the station. Expect 8 lives, 8 current maximum hearts and a limit of 10. The full option should show two diamonds missing, and the half option should be affordable. Close the form without paying.
+3. Add two diamonds to a different inventory slot. Open and choose **Restore 1 Heart**. Expect exactly six diamonds, two ingots and one Heart of the Sea consumed, 9 lives and a native maximum of 18 HP. Supply the half recipe and select **Restore ½ Heart**. Expect 9½ lives and 19 HP. Leave, rejoin, save and reopen. The half-heart maximum should persist. At 9½, supply enough for either option and verify that only half can be selected. At 10, verify that both are disabled. Compare A and B at each step.
+4. Damage A before restoring. Use the included Hearts Probe in air to compare current HP and maximum HP, then heal naturally to see the HUD ceiling. Compare the HUD against the host's `native_health_verified` readback. Reconciliation can take up to 60 ticks. Repeat a reduced-cap join with Health Boost in a cheats-enabled test copy.
+5. Hold Use, dismiss the form, reopen it and try consecutive presses. Each deliberate selection should spend one recipe. With A's form open, have B remove the table. In a separate attempt, have the host change the preset. Verify the stale choice spends nothing. Repeat with a disconnection. Check a previously crafted 0.4.2 heart in an upgraded copy and verify that the ordinary crafting book offers only the table recipe from this recovery system.
+6. Die through elimination. Check Spectator on respawn, reconnect and world reopen. Confirm the guest keeps their own progression. In a cheats-enabled fixture the host can reset one online target with `/waveform:reset_lives @s`. For fast setup, use `/give @s waveform:reanimation_table`, vanilla material IDs and `/give @s waveform:hearts_probe`.
 
 ### Difficulty checks
 
 1. In a cheats-off Windows world with experiments off, verify the host can view settings, select each preset, and edit each value. Try `-1`, `1201`, and a fractional value. Try raising Easy above Normal and lowering Normal below Easy. Verify that each rejection preserves every saved value. Have a normal guest attempt both write commands and confirm the host's view stays the same.
-2. In the fixture world, give two players enough deficit and stacked hearts. Select Hard and set it to 100 ticks. Recover as player A and verify player B can recover during A's cooldown. At one tick remaining, verify the next attempt leaves A's heart and balance intact. At the issued deadline, the next eligible attempt should grant. For exact boundary evidence use the host log's `recoveryTick`, the successful entry's `state.recoveryReadyAt`, and the denial entry's `remainingTicks`.
+2. In the fixture world, give two players enough deficit and materials for multiple recoveries. Select Hard and set it to 100 ticks. Recover as player A and verify player B can recover during A's cooldown. Keep A's form open through the countdown. Check that Restore stays disabled until the first refresh after the deadline and that waiting spends nothing. Select it when it enables and compare the new balance with the host log's `recoveryTick` and `state.recoveryReadyAt`.
 3. Edit Hard and switch to Normal while an issued cooldown is active. Verify the existing deadline and the duration of the next successful recovery. For save/reopen, use a longer fixture such as 1,200 ticks, save while the wait is still active, then view the saved selection and all values after reopening. Check the player's remaining cooldown and confirm Normal starts no new wait at its default value.
 4. Confirm progressive hunger starts OFF. Turn it ON, switch presets, die, recover at the table, and save and reopen. Compare the saved target with the probe's native food maximum of 20. Turn the preference OFF again. Check ordinary eating, sprinting and regeneration in both modes and guest denial of the hunger command.
 
 ## PS5 guest test
 
 1. With separate signed-in Microsoft accounts and online play enabled, join an unmodified Windows-hosted world from PS5 via **Play → Friends** or an invite. Enable **Require players to accept resource packs to join** on the disposable pack world. Join it via the same route and accept its resource download.
-2. As a normal guest in Survival, verify the Reanimation Table and all three item names and icons. Receive a kit from the host. Use a full and half heart at the placed table with **L2** by default. Repeat the Windows checks for air and other blocks, hold and release, a last item, and the half-unit restriction at 9½. Confirm the guest's balance, inventory and chat feedback against the host log. Switch which player recovers while watching the other player's balance to verify multiplayer isolation.
-3. With a positive cooldown selected, check that the guest cannot select or edit presets. Recover with L2 and confirm independence of the host's and guest's waits. Rejoin while a wait is active and check the host log and the guest's next eligible use.
-4. Use the included Hearts Probe with L2 while aiming into empty air. Repeat the HP sequence in the Windows table with the PS5 guest as player A. Compare the guest HUD at even and odd maxima with the host's `native_health_verified` records. Repeat damage and healing, elimination, leave/rejoin and host save/reopen. Check ordinary hunger in both preference modes. Record both retail builds, pack versions, join or resource errors, screenshots and Windows logs.
+2. As a normal member with an empty hotbar slot selected, open the placed table with **L2**. Check all three ingredient icons, text readability, scrolling, focus, disabled buttons and dismiss without payment. Run the full and half recovery sequence above using the controller. Compare the guest's inventory, HUD and measured HP with the host's. Test simultaneous use at one table.
+3. As host, select Hard. Verify that the guest can use the station during the host's cooldown and cannot change difficulty. Check the guest's countdown, rejoin, elimination and host save/reopen. Record both game builds, any resource or form errors, HUD screenshots and the Windows Content Log.
 
 ## Build and validation
 
-Use Node.js 24 and Python 3.10 or newer (`python` on Windows, `python3` on Linux and macOS). From this directory run `npm ci`, `npm run build`, and `npm run validate`. Validation type-checks against the pinned stable API, runs logic and mocked adapter tests, and checks the 20 health groups against the pinned vanilla player, pack versions and identities, exact recipes, the table's self-drop, textures, scripts and both nested archives. The integrated build awaits Windows and PS5 gameplay testing. [Milestone handover](HANDOVER.md)
+Use Node.js 24 and Python 3.10 or newer (`python` on Windows, `python3` on Linux and macOS). From this directory run `npm ci`, `npm run build`, and `npm run validate`. Validation type-checks against the pinned stable API, runs logic and mocked adapter tests, and checks the 20 health groups against the pinned vanilla player, pack versions and identities, exact recipes, the table's self-drop, textures, scripts and both nested archives. The V2 table awaits retail Windows and PS5 gameplay checks. [Milestone handover](HANDOVER.md)
