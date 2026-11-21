@@ -1,5 +1,7 @@
 # Hearts & Lives development add-on
 
+> **Players:** start with the [main README](../../README.md) and the [Player Guide](../../docs/PLAYER_GUIDE.md). This page holds the technical reference and the retail acceptance procedures. Build and release steps are in [Development](../../docs/DEVELOPMENT.md).
+
 Hearts & Lives **v0.5.3** upgrades v0.5.1 and v0.5.2 in place. It targets retail Bedrock **26.60** or newer, stable `@minecraft/server` **2.11.0** and `@minecraft/server-ui` **2.3.0**. The pack UUIDs and saved player records carry forward. [Download Hearts & Lives v0.5.3](dist/hearts-and-lives-v0.5.3.mcaddon) · [Standalone Hearts Probe](dist/hearts-probe.mcaddon)
 
 To import from this Windows checkout, run the following in PowerShell. In the world's settings, enable **Hearts & Lives v0.5.3 (Behaviour)** and **Hearts & Lives v0.5.3 (Resources)** together, with experiments off.
