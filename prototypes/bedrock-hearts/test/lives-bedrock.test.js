@@ -127,8 +127,9 @@ test("table defers full and half recovery and debits only the initiating player'
     assert.equal(components.has("waveform:recover_capacity"), false)
 })
 
-test("ordinary blocks, unrelated items and already canceled actions cannot restore capacity", () => {
+test("ordinary blocks, sneak-use with ordinary items and already canceled actions cannot restore capacity", () => {
     const player = injured("table-only")
+    player.isSneaking = true
     for (const options of [
         { block: tableAt("minecraft:crafting_table") },
         { itemStack: new Stack("minecraft:stone", 1) },
@@ -175,7 +176,7 @@ test("table rejects full hearts for a half-unit deficit and rejects recovery at 
     system.advance()
     assert.equal(state(player.id).lives, 19)
     assert.equal(player.inventory.getItem(0).amount, 3)
-    assert.match(player.messages.at(-1), /exceed the starting capacity/)
+    assert.equal(player.messages.at(-1), "Only half a heart will fit.")
 
     player.inventory.setItem(0, new Stack(HALF, 2))
     interact(player)
@@ -185,6 +186,7 @@ test("table rejects full hearts for a half-unit deficit and rejects recovery at 
     system.advance()
     assert.equal(state(player.id).lives, 20)
     assert.equal(player.inventory.getItem(0).amount, 1)
+    assert.equal(player.messages.at(-1), "ALL HEARTS RESTORED!")
 })
 
 test("table does not debit or restore when the held slot or exact stack changes before execution", () => {
@@ -306,7 +308,7 @@ test("both hearts share one player cooldown, with denial at N−1 and success at
 
     interact(a)
     system.advance()
-    assert.match(a.messages.at(-1), /ready in 1 more tick\./)
+    assert.equal(a.messages.at(-1), "Try again in 1 second.")
     assert.equal(state(a.id).lives, 16)
     assert.equal(state(a.id).recoveryReadyAt, firstExpiry)
     assert.equal(a.inventory.getItem(0).amount, 2)
@@ -343,7 +345,7 @@ test("an issued cooldown survives edits, a preset switch and a reopened world", 
 
     interact(returning)
     system.advance()
-    assert.match(returning.messages.at(-1), /ready in 2 more ticks/)
+    assert.equal(returning.messages.at(-1), "Try again in 1 second.")
     assert.equal(returning.inventory.getItem(0).amount, 2)
     system.advance()
     interact(returning)

@@ -12,9 +12,9 @@ export interface Ingredient {
 type Recipe = readonly Ingredient[]
 type Prices = Readonly<Record<RecoveryUnits, Recipe>>
 
-const diamond = { id: "minecraft:diamond", label: "Diamonds", icon: "diamond" }
-const netherite = { id: "minecraft:netherite_ingot", label: "Netherite Ingots", icon: "netherite_ingot" }
-const sea = { id: "minecraft:heart_of_the_sea", label: "Heart of the Sea", icon: "heartofthesea_closed" }
+const diamond = { id: "minecraft:diamond", label: "Diamond", icon: "diamond" }
+const netherite = { id: "minecraft:netherite_ingot", label: "Netherite", icon: "netherite_ingot" }
+const sea = { id: "minecraft:heart_of_the_sea", label: "Sea Heart", icon: "heartofthesea_closed" }
 const normal: Prices = {
     2: [{ ...diamond, required: 6 }, { ...netherite, required: 2 }, { ...sea, required: 1 }],
     1: [{ ...diamond, required: 3 }, { ...netherite, required: 1 }, { ...sea, required: 1 }],

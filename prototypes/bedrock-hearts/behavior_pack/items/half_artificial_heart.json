@@ -4,7 +4,7 @@
     "description": {
       "identifier": "waveform:half_artificial_heart",
       "menu_category": {
-        "category": "items"
+        "category": "none"
       }
     },
     "components": {

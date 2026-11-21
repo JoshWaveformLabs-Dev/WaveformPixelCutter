@@ -14,7 +14,7 @@ import { decodeState, encodeState, initialState, isEliminated } from "./lives-st
 import type { LifeState, RecoveryUnits } from "./lives-state.js"
 import { reconcileSpawn, recordDeath, TickGate, writeVerified } from "./lives-store.js"
 import type { LifeStore } from "./lives-store.js"
-import { showRecoveryForm } from "./recovery-form.js"
+import { roomMessage, showRecoveryForm, waitMessage } from "./recovery-form.js"
 import { materialPayment, inventoryCounts, recoveryPrices } from "./recovery-materials.js"
 import { recover, restoreCapacity } from "./recovery.js"
 import { readDifficultySettings, readProgressiveHungerEnabled } from "./difficulty-bedrock.js"
@@ -149,7 +149,7 @@ function resetPlayer(player: Player): void {
 }
 
 function recoverAtTable(player: Player, inventory: Container, settings: DifficultySettings, units: RecoveryUnits,
-    legacy?: { index: number; item: ItemStack }): void {
+    legacy?: { index: number; item: ItemStack }): LifeState | undefined {
     flushLifeEvents(player.id, player)
     const { recoveryCooldownTicks: cooldownTicks } = settings.presets[settings.activePreset]
     const recoveryTick = getRecoveryTick()
@@ -163,12 +163,11 @@ function recoverAtTable(player: Player, inventory: Container, settings: Difficul
     if ("denial" in result) {
         if (result.denial === "cooldown") {
             log("recovery_cooldown", player.id, { recoveryTick, remainingTicks: result.remainingTicks })
-            const unit = result.remainingTicks === 1 ? "tick" : "ticks"
-            player.sendMessage(`${LABEL} Recovery is ready in ${result.remainingTicks} more ${unit}.`)
+            player.sendMessage(waitMessage(result.remainingTicks))
         } else if (result.denial === "over_cap") {
-            player.sendMessage(`${LABEL} This heart would exceed the starting capacity.`)
+            player.sendMessage(roomMessage(decodeState(store.read(player.id))))
         } else if (result.denial === "missing_materials") {
-            player.sendMessage(`${LABEL} Missing materials. Open the table to check your inventory.`)
+            player.sendMessage("Missing materials. Check the table again.")
         } else if (result.denial === "stale_item") {
             player.sendMessage(`${LABEL} Hold the matching stackable heart and try again.`)
         }
@@ -176,20 +175,23 @@ function recoverAtTable(player: Player, inventory: Container, settings: Difficul
     }
     reconcileNativeHealth(player, "recovery", () => result.state)
     log("recovery", player.id, { state: result.state, recoveryTick, cooldownTicks })
-    player.sendMessage(`${LABEL} Restored ${units / 2} life and ${units / 2} maximum heart | ${balance(result.state)}`)
+    if (legacy) player.sendMessage(`${LABEL} Restored ${units / 2} life and ${units / 2} maximum heart | ${balance(result.state)}`)
+    return result.state
 }
 
 world.beforeEvents.playerInteractWithBlock.subscribe((event) => guarded("table interaction", () => {
     const { block, itemStack, player } = event
     if (event.cancel || block.typeId !== REANIMATION_TABLE) return
     const legacyUnits = itemStack && HEART_UNITS.get(itemStack.typeId)
-    if (itemStack && !legacyUnits) return
+    // Standing Use opens the workstation, including immediately after placing it.
+    if (itemStack && !legacyUnits && player.isSneaking) return
     event.cancel = true
     const id = player.id
     if (!event.isFirstEvent || pendingUses.has(id) || !USES.enter(id, system.currentTick)) return
 
     const token = Symbol()
-    const legacy = itemStack && { index: player.selectedSlotIndex, item: itemStack.clone() }
+    const legacy = itemStack && legacyUnits
+        ? { index: player.selectedSlotIndex, item: itemStack.clone(), units: legacyUnits } : undefined
     const { dimension, location } = block
     function withinReach(): boolean {
         if (pendingUses.get(id) !== token || !alive(player) || player.getGameMode() === GameMode.Spectator ||
@@ -208,40 +210,43 @@ world.beforeEvents.playerInteractWithBlock.subscribe((event) => guarded("table i
         if (!withinReach()) return undefined
         const state = flushLifeEvents(id, player) ?? decodeState(store.read(id))
         const settings = readDifficultySettings()
-        const hp = player.getComponent(EntityComponentTypes.Health)?.effectiveMax
-        if (hp === undefined) throw new Error("Native maximum health unavailable")
-        return { state, nativeHearts: hp / 2, preset: settings.activePreset,
+        return { state, preset: settings.activePreset,
             cooldownTicks: settings.presets[settings.activePreset].recoveryCooldownTicks,
             remainingTicks: Math.max(0, (state.recoveryReadyAt ?? 0) - getRecoveryTick()),
             counts: inventoryCounts(inventory()) }
     }
 
     async function useTable(): Promise<void> {
+        let operation = legacy ? "recovery_failed" : "table_open_failed"
         try {
             if (!withinReach()) return
-            if (legacy && legacyUnits) {
-                recoverAtTable(player, inventory(), readDifficultySettings(), legacyUnits, legacy)
+            if (legacy) {
+                recoverAtTable(player, inventory(), readDifficultySettings(), legacy.units, legacy)
                 return
             }
-            if (inventory().getItem(player.selectedSlotIndex)) return
             const quote = view()
             if (!quote) return
-            const units = await showRecoveryForm(player, quote, view)
-            if (!units || pendingUses.get(id) !== token) return
-            if (!withinReach()) {
-                if (player.isValid) player.sendMessage("Return to the Reanimation Table to restore capacity.")
-                return
-            }
-            const settings = readDifficultySettings()
-            if (settings.activePreset !== quote.preset ||
-                settings.presets[settings.activePreset].recoveryCooldownTicks !== quote.cooldownTicks) {
-                player.sendMessage("Difficulty settings changed. Open the table to review the new costs.")
-                return
-            }
-            recoverAtTable(player, inventory(), settings, units)
+            await showRecoveryForm(player, quote, view, units => {
+                operation = "recovery_failed"
+                if (pendingUses.get(id) !== token) return
+                if (!withinReach()) {
+                    if (player.isValid) player.sendMessage("Come back to the Reanimation Table.")
+                    return
+                }
+                const settings = readDifficultySettings()
+                if (settings.activePreset !== quote.preset ||
+                    settings.presets[settings.activePreset].recoveryCooldownTicks !== quote.cooldownTicks) {
+                    player.sendMessage("The table settings changed. Open it again.")
+                    return
+                }
+                return recoverAtTable(player, inventory(), settings, units)
+            })
         } catch (error) {
-            console.warn(`${LABEL} Recovery failed for ${id}: ${error}`)
-            if (player.isValid) guarded("recovery feedback", () => player.sendMessage(`${LABEL} Recovery error. Check the host log before retrying.`))
+            const trace = error instanceof Error && error.stack ? "\n" + error.stack : ""
+            console.warn(`${LABEL} ${operation} for ${id} at ${dimension.id} (${location.x}, ${location.y}, ${location.z}): ${error}${trace}`)
+            if (player.isValid) guarded("table feedback", () => player.sendMessage(operation === "table_open_failed"
+                ? "The table couldn't open. Try using it again."
+                : `${LABEL} Recovery error. Check the host log before retrying.`))
         } finally {
             if (pendingUses.get(id) === token) pendingUses.delete(id)
         }

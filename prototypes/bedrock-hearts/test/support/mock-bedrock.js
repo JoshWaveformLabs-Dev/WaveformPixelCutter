@@ -55,6 +55,7 @@ export const world = {
 export class Player {
     typeId = "minecraft:player"
     isValid = true
+    isSneaking = false
     health = 20
     healthMax = 20
     hunger = { currentValue: 20, effectiveMax: 20 }

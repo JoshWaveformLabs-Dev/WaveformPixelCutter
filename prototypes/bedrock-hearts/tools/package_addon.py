@@ -4,17 +4,22 @@ from hashlib import sha256
 import io
 import json
 from pathlib import Path
+import re
 import runpy
 import struct
 import uuid
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-ARTIFACT = ROOT / "dist/hearts-and-lives-dev.mcaddon"
+PACKAGE = json.loads((ROOT / "package.json").read_bytes())
+RELEASE = PACKAGE["version"]
+if not re.fullmatch(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}", RELEASE):
+    raise ValueError("Use major.minor.patch in package.json for a Bedrock release")
+VERSION = [int(part) for part in RELEASE.split(".")]
+ARTIFACT = ROOT / "dist" / f"hearts-and-lives-v{RELEASE}.mcaddon"
 ENGINE = [1, 26, 60]
 SERVER = "2.11.0"
 UI = "2.3.0"
-VERSION = [0, 5, 0]
 NATIVE_PROBE = ROOT.parent / "bedrock-native-caps"
 PLAYER = "entities/player.json"
 ITEM_ATLAS = "textures/item_texture.json"
@@ -22,6 +27,7 @@ TERRAIN_ATLAS = "textures/terrain_texture.json"
 ENTRY = "scripts/main.js"
 BP = "hearts_and_lives_bp.mcpack"
 RP = "hearts_and_lives_rp.mcpack"
+PACK_NAMES = {BP: f"Hearts & Lives v{RELEASE} (Behaviour)", RP: f"Hearts & Lives v{RELEASE} (Resources)"}
 TABLE_ID = "waveform:reanimation_table"
 TABLE_BLOCK = "blocks/reanimation_table.json"
 TABLE_LOOT = "loot_tables/blocks/reanimation_table.json"
@@ -86,20 +92,27 @@ def collect_packs():
     behavior[PLAYER] = native_player()
     behavior["LICENSE.txt"] = (NATIVE_PROBE / "vendor/LICENSE.md").read_bytes().replace(b"\r\n", b"\n")
     resources["LICENSE.txt"] = behavior["LICENSE.txt"]
-    return {BP: behavior, RP: resources}
+    packs = {BP: behavior, RP: resources}
+    for pack, files in packs.items():
+        manifest = json.loads(files["manifest.json"])
+        if manifest["header"]["name"] != PACK_NAMES[pack]:
+            manifest["header"]["name"] = PACK_NAMES[pack]
+            files["manifest.json"] = (json.dumps(manifest, ensure_ascii=False, indent=2) + "\n").encode("utf-8")
+    return packs
 
 
 def validate_metadata(behavior, resources):
     behavior_manifest = json.loads(behavior["manifest.json"])
     resource_manifest = json.loads(resources["manifest.json"])
     ids = []
-    for manifest, expected_types in [(behavior_manifest, {"data", "script"}),
-                                     (resource_manifest, {"resources"})]:
+    for pack, manifest, expected_types in [(BP, behavior_manifest, {"data", "script"}),
+                                           (RP, resource_manifest, {"resources"})]:
         header = manifest["header"]
         modules = manifest["modules"]
         require(manifest["format_version"] == 2, "Use manifest format 2")
         require(header["min_engine_version"] == ENGINE, "Wrong retail baseline")
-        require(header["name"] and header["description"], "Incomplete pack header")
+        require(header["name"] == PACK_NAMES[pack], f"Wrong release display name in {pack}")
+        require(header["description"], "Missing pack description")
         version = header["version"]
         require(version == VERSION, "Wrong development pack version")
         require(len(modules) == len(expected_types) and
@@ -126,15 +139,13 @@ def validate_metadata(behavior, resources):
         {"module_name": "@minecraft/server-ui", "version": UI},
     ], "Wrong pack linkage or stable script dependency")
 
-    package = json.loads((ROOT / "package.json").read_bytes())
     lock = json.loads((ROOT / "package-lock.json").read_bytes())
-    require(package["version"] == lock["version"] == lock["packages"][""]["version"] ==
-            ".".join(map(str, VERSION)), "Package and manifest versions must agree")
-    require(package["devDependencies"]["@minecraft/server"] == SERVER and
+    require(RELEASE == lock["version"] == lock["packages"][""]["version"], "Package and lock versions must agree")
+    require(PACKAGE["devDependencies"]["@minecraft/server"] == SERVER and
             lock["packages"]["node_modules/@minecraft/server"]["version"] == SERVER,
             "Installed declarations must match the stable script dependency")
 
-    require(package["devDependencies"]["@minecraft/server-ui"] == UI and
+    require(PACKAGE["devDependencies"]["@minecraft/server-ui"] == UI and
             lock["packages"]["node_modules/@minecraft/server-ui"]["version"] == UI, "Wrong stable UI declarations")
     for icon in INGREDIENT_ICONS:
         validate_png(resources[f"textures/ui/waveform/{icon}.png"], icon)
@@ -153,6 +164,9 @@ def validate_item(name, behavior, resources, textures):
     require(item["format_version"] == ".".join(map(str, ENGINE)), "Wrong item format version")
     definition = item["minecraft:item"]
     require(definition["description"]["identifier"] == f"waveform:{name}", "Wrong item ID")
+    if name in ("artificial_heart", "half_artificial_heart"):
+        require(definition["description"].get("menu_category") == {"category": "none"},
+                f"Legacy {name} must stay out of Creative")
     components = definition["components"]
     require(components["minecraft:display_name"]["value"] == label, "Wrong display name")
     require(components["minecraft:max_stack_size"] == stack_size, "Wrong max stack size")
@@ -182,8 +196,8 @@ def validate_table(behavior, resources):
     block = json.loads(behavior[TABLE_BLOCK])
     require(block["format_version"] == ".".join(map(str, ENGINE)), "Wrong block format version")
     definition = block["minecraft:block"]
-    require(definition["description"] == {"identifier": TABLE_ID},
-            "Wrong table block description")
+    require(definition["description"] == {"identifier": TABLE_ID, "menu_category": {"category": "items"}},
+            "Reanimation Table must be available in the Creative Items category")
     components = definition["components"]
     require(components["minecraft:display_name"] == "Reanimation Table", "Wrong table display name")
     require(components.get("minecraft:loot") == TABLE_LOOT, "Wrong Reanimation Table loot path")
